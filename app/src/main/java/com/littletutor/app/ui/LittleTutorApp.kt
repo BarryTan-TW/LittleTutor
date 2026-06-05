@@ -173,14 +173,6 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
                 viewModel = viewModel,
                 uiState = uiState,
                 innerPadding = innerPadding,
-                onTakePhoto = {
-                    viewModel.preparePhotoCaptureUri()?.let { uri ->
-                        cameraLauncher.launch(uri)
-                    }
-                },
-                onOpenPhotoPreview = viewModel::openPhotoPreview,
-                onTogglePhotoSelection = viewModel::togglePhotoSelection,
-                onDeleteSelectedPhotos = viewModel::deleteSelectedPhotos,
                 onToggleTestUnitSelection = viewModel::toggleTestUnitSelection,
                 onMoveUp = viewModel::moveTestUnitUp,
                 onMoveDown = viewModel::moveTestUnitDown,
@@ -239,8 +231,21 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
             AddTestUnitDialog(
                 title = uiState.addingUnitTitleInput,
                 words = uiState.addingUnitWordsInput,
+                isPhotoAreaOpen = uiState.isAddUnitPhotoAreaOpen,
+                photoPaths = uiState.photoPaths,
+                selectedPhotoPaths = uiState.selectedPhotoPaths,
                 onTitleChange = viewModel::updateAddingUnitTitle,
                 onWordsChange = viewModel::updateAddingUnitWords,
+                onOpenPhotoArea = viewModel::openAddUnitPhotoArea,
+                onClosePhotoArea = viewModel::closeAddUnitPhotoArea,
+                onTakePhoto = {
+                    viewModel.preparePhotoCaptureUri()?.let { uri ->
+                        cameraLauncher.launch(uri)
+                    }
+                },
+                onOpenPhotoPreview = viewModel::openPhotoPreview,
+                onTogglePhotoSelection = viewModel::togglePhotoSelection,
+                onDeleteSelectedPhotos = viewModel::deleteSelectedPhotos,
                 onSave = viewModel::saveAddedUnit,
                 onDismiss = viewModel::closeAddUnitDialog
             )
@@ -285,10 +290,6 @@ private fun HomeScreen(
     viewModel: TutorViewModel,
     uiState: com.littletutor.app.ui.tutor.LittleTutorUiState,
     innerPadding: PaddingValues,
-    onTakePhoto: () -> Unit,
-    onOpenPhotoPreview: (String) -> Unit,
-    onTogglePhotoSelection: (String) -> Unit,
-    onDeleteSelectedPhotos: () -> Unit,
     onToggleTestUnitSelection: (String) -> Unit,
     onMoveUp: () -> Unit,
     onMoveDown: () -> Unit,
@@ -304,91 +305,10 @@ private fun HomeScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "題庫建立區域",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxSize(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Button(onClick = onTakePhoto) {
-                            Text(text = "拍照")
-                        }
-                        Button(
-                            onClick = onDeleteSelectedPhotos,
-                            enabled = uiState.selectedPhotoPaths.isNotEmpty()
-                        ) {
-                            Text(text = "刪除照片")
-                        }
-                    }
-
-                    Card(
-                        modifier = Modifier
-                            .weight(3f)
-                            .fillMaxSize(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        if (uiState.photoPaths.isEmpty()) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.Center,
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(text = "尚無照片")
-                            }
-                        } else {
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(4),
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(uiState.photoPaths.size) { index ->
-                                    val photoPath = uiState.photoPaths[index]
-                                    PhotoThumbnail(
-                                        photoPath = photoPath,
-                                        isSelected = uiState.selectedPhotoPaths.contains(photoPath),
-                                        onPreview = { onOpenPhotoPreview(photoPath) },
-                                        onToggleSelection = { onTogglePhotoSelection(photoPath) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
         TestUnitSection(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(2f),
+                .weight(1f),
             viewModel = viewModel,
             testUnits = uiState.testUnits,
             selectedUnitIds = uiState.selectedTestUnitIds,
@@ -865,10 +785,23 @@ private fun TestUnitSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(text = "課文列表與測試", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                TextButton(onClick = onAddUnit) { Text(text = "新增") }
+                Button(onClick = onAddUnit) { Text(text = "新增") }
             }
             if (testUnits.isEmpty()) {
-                Text(text = "目前沒有課文單元，請先從照片建立。")
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(text = "目前沒有課文單元，請先按新增。", style = MaterialTheme.typography.bodyMedium)
+                    Button(
+                        onClick = onAddUnit,
+                        modifier = Modifier.fillMaxWidth(0.5f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text(text = "新增課文單元")
+                    }
+                }
             } else {
                 LazyColumn(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(testUnits) { unit ->
@@ -925,8 +858,17 @@ private fun TestUnitSection(
 private fun AddTestUnitDialog(
     title: String,
     words: String,
+    isPhotoAreaOpen: Boolean,
+    photoPaths: List<String>,
+    selectedPhotoPaths: Set<String>,
     onTitleChange: (String) -> Unit,
     onWordsChange: (String) -> Unit,
+    onOpenPhotoArea: () -> Unit,
+    onClosePhotoArea: () -> Unit,
+    onTakePhoto: () -> Unit,
+    onOpenPhotoPreview: (String) -> Unit,
+    onTogglePhotoSelection: (String) -> Unit,
+    onDeleteSelectedPhotos: () -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -940,44 +882,156 @@ private fun AddTestUnitDialog(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(text = "新增測試項目") },
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = if (isPhotoAreaOpen) "題庫建立區域" else "新增測試項目")
+                            if (!isPhotoAreaOpen) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = onOpenPhotoArea,
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text(text = "從照片建立")
+                                }
+                            }
+                        }
+                    },
                     navigationIcon = {
-                        TextButton(onClick = onDismiss) { Text(text = "取消") }
+                        if (isPhotoAreaOpen) {
+                            TextButton(onClick = onClosePhotoArea) {
+                                Text(text = "返回")
+                            }
+                        }
                     },
                     actions = {
-                        TextButton(
-                            onClick = onSave,
-                            enabled = title.isNotBlank() && words.isNotBlank()
-                        ) {
-                            Text(text = "新增")
+                        if (!isPhotoAreaOpen) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = onSave,
+                                    enabled = title.isNotBlank() && words.isNotBlank()
+                                ) {
+                                    Text(text = "儲存")
+                                }
+                                TextButton(onClick = onDismiss) {
+                                    Text(text = "取消")
+                                }
+                            }
                         }
                     }
                 )
             },
             modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .imePadding()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = onTitleChange,
-                    label = { Text(text = "課文單元名稱") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = words,
-                    onValueChange = onWordsChange,
-                    label = { Text(text = "字詞（可用 、 或換行分隔）") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 10
-                )
+            if (isPhotoAreaOpen) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Card(
+                        modifier = Modifier.fillMaxSize(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxSize(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Button(onClick = onTakePhoto) {
+                                        Text(text = "拍照")
+                                    }
+                                    Button(
+                                        onClick = onDeleteSelectedPhotos,
+                                        enabled = selectedPhotoPaths.isNotEmpty()
+                                    ) {
+                                        Text(text = "刪除照片")
+                                    }
+                                }
+
+                                Card(
+                                    modifier = Modifier
+                                        .weight(3f)
+                                        .fillMaxSize(),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                ) {
+                                    if (photoPaths.isEmpty()) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(16.dp),
+                                            verticalArrangement = Arrangement.Center,
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Text(text = "尚無照片")
+                                        }
+                                    } else {
+                                        LazyVerticalGrid(
+                                            columns = GridCells.Fixed(4),
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            items(photoPaths.size) { index ->
+                                                val photoPath = photoPaths[index]
+                                                PhotoThumbnail(
+                                                    photoPath = photoPath,
+                                                    isSelected = selectedPhotoPaths.contains(photoPath),
+                                                    onPreview = { onOpenPhotoPreview(photoPath) },
+                                                    onToggleSelection = { onTogglePhotoSelection(photoPath) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .imePadding()
+                        .padding(16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = onTitleChange,
+                        label = { Text(text = "課文單元名稱") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = words,
+                        onValueChange = onWordsChange,
+                        label = { Text(text = "字詞（可用 、 或換行分隔）") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 10
+                    )
+                }
             }
         }
     }
@@ -1072,45 +1126,32 @@ private fun DirectSelectPreviewDialog(
             decorFitsSystemWindows = false
         )
     ) {
-        Box(modifier = Modifier.fillMaxSize().imePadding()) {
-            Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = { Text(text = "照片預覽 - 直接圈選") },
-                        navigationIcon = { TextButton(onClick = onDismiss) { Text(text = "關閉") } },
-                        actions = {
-                            TextButton(onClick = onSave, enabled = unitTitle.isNotBlank() && selectedTokenIndexes.isNotEmpty()) {
-                                Text(text = "儲存到課文")
-                            }
-                        }
-                    )
-                }
-            ) { innerPadding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = unitTitle,
-                        onValueChange = onUnitTitleChange,
-                        label = { Text("課文單元名稱") },
-                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        TextButton(onClick = { titleMenuExpanded = true }) { Text(text = "選取既有課文單元") }
-                        DropdownMenu(expanded = titleMenuExpanded, onDismissRequest = { titleMenuExpanded = false }) {
-                            existingUnitTitles.forEach { title ->
-                                DropdownMenuItem(
-                                    text = { Text(text = title) },
-                                    onClick = { onUnitTitleChange(title); titleMenuExpanded = false }
-                                )
-                            }
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(text = "照片預覽 - 直接圈選") },
+                    navigationIcon = { TextButton(onClick = onDismiss) { Text(text = "關閉") } },
+                    actions = {
+                        TextButton(onClick = onSave, enabled = unitTitle.isNotBlank() && selectedTokenIndexes.isNotEmpty()) {
+                            Text(text = "儲存到課文")
                         }
                     }
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Left side: Photo Preview
+                Column(
+                    modifier = Modifier.weight(2.5f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     if (isLoading) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -1141,6 +1182,31 @@ private fun DirectSelectPreviewDialog(
                         ) { Text(text = "撤銷上一筆曲線") }
                     }
                     Text(text = "提示：可點擊框選單字，優化：長按可圈選文字", style = MaterialTheme.typography.bodySmall)
+                }
+
+                // Right side: Controls and Text
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = unitTitle,
+                        onValueChange = onUnitTitleChange,
+                        label = { Text("課文單元名稱") },
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = { titleMenuExpanded = true }) { Text(text = "選取既有課文單元") }
+                        DropdownMenu(expanded = titleMenuExpanded, onDismissRequest = { titleMenuExpanded = false }) {
+                            existingUnitTitles.forEach { title ->
+                                DropdownMenuItem(
+                                    text = { Text(text = title) },
+                                    onClick = { onUnitTitleChange(title); titleMenuExpanded = false }
+                                )
+                            }
+                        }
+                    }
                     val selectedTexts = previewTokens.filterIndexed { index, _ -> selectedTokenIndexes.contains(index) }.joinToString(separator = "、") { it.text }
                     OutlinedTextField(
                         value = selectedTexts,
@@ -1148,8 +1214,8 @@ private fun DirectSelectPreviewDialog(
                         readOnly = true,
                         label = { Text(text = "圈選後自動轉文字") },
                         placeholder = { Text(text = "尚未選取文字") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 2
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        minLines = 8
                     )
                 }
             }

@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import androidx.core.graphics.scale
 
 enum class TestingMode {
     WRITING_BOARD,  // 畫板書寫測試
@@ -63,6 +64,7 @@ data class LittleTutorUiState(
     val testUnits: List<TestUnit> = emptyList(),
     val selectedTestUnitIds: Set<String> = emptySet(),
     val isAddUnitDialogOpen: Boolean = false,
+    val isAddUnitPhotoAreaOpen: Boolean = false,
     val addingUnitTitleInput: String = "",
     val addingUnitWordsInput: String = "",
     val isEditUnitDialogOpen: Boolean = false,
@@ -108,6 +110,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         reloadFromStorage()
+        ensureTextToSpeech()
     }
 
     fun openSettings() {
@@ -605,6 +608,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update {
             it.copy(
                 isAddUnitDialogOpen = true,
+                isAddUnitPhotoAreaOpen = false,
                 addingUnitTitleInput = "",
                 addingUnitWordsInput = ""
             )
@@ -615,10 +619,19 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update {
             it.copy(
                 isAddUnitDialogOpen = false,
+                isAddUnitPhotoAreaOpen = false,
                 addingUnitTitleInput = "",
                 addingUnitWordsInput = ""
             )
         }
+    }
+
+    fun openAddUnitPhotoArea() {
+        _uiState.update { it.copy(isAddUnitPhotoAreaOpen = true) }
+    }
+
+    fun closeAddUnitPhotoArea() {
+        _uiState.update { it.copy(isAddUnitPhotoAreaOpen = false) }
     }
 
     fun updateAddingUnitTitle(input: String) {
@@ -796,13 +809,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun recognizeTextFromBitmap(bitmap: Bitmap): String {
         return runCatching {
             val image = InputImage.fromBitmap(bitmap, 0)
-            textRecognizer.process(image).await()
-                .textBlocks
-                .flatMap { block -> block.lines }
-                .flatMap { line -> line.elements }
-                .map { it.text }
-                .joinToString(separator = "")
-                .trim()
+            textRecognizer.process(image).await().text.replace("\\s+".toRegex(), "")
         }.getOrDefault("")
     }
 
@@ -834,7 +841,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private fun toBinaryBitmap(source: Bitmap): Bitmap {
         val width = source.width
         val height = source.height
-        val output = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val output = androidx.core.graphics.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         val pixels = IntArray(width * height)
         source.getPixels(pixels, 0, width, 0, 0, width, height)
 
@@ -898,12 +905,12 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         val scale = 1400f / maxSide.toFloat()
         val newWidth = (source.width * scale).toInt().coerceAtLeast(1)
         val newHeight = (source.height * scale).toInt().coerceAtLeast(1)
-        return Bitmap.createScaledBitmap(source, newWidth, newHeight, true)
+        return source.scale(newWidth, newHeight, true)
     }
 
     private fun normalizeInkToCanvas(source: Bitmap): Bitmap {
         val targetSize = 1400
-        val output = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
+        val output = androidx.core.graphics.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
         val canvas = android.graphics.Canvas(output)
         canvas.drawColor(Color.WHITE)
 
@@ -952,7 +959,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             val distance = levenshteinDistance(candidate, normalizedTarget)
 
             // 字數必須相同或相差1
-            val lengthDiff = (candidate.length - normalizedTarget.length).toInt()
+            val lengthDiff = candidate.length - normalizedTarget.length
             if (lengthDiff.coerceIn(-1, 1) != lengthDiff) {
                 return@any false
             }
@@ -1015,12 +1022,16 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         textToSpeech = TextToSpeech(getApplication()) { status ->
-            ttsReady = status == TextToSpeech.SUCCESS
-            if (ttsReady) {
+            if (status == TextToSpeech.SUCCESS) {
                 val tts = textToSpeech ?: return@TextToSpeech
                 val localeResult = tts.setLanguage(Locale.TRADITIONAL_CHINESE)
                 if (localeResult == TextToSpeech.LANG_MISSING_DATA || localeResult == TextToSpeech.LANG_NOT_SUPPORTED) {
                     tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
+                }
+                ttsReady = true
+                // 如果在初始化完成時已經在測試中，補上第一次朗讀
+                if (_uiState.value.isWritingTestActive && !_uiState.value.isWritingRoundFinished) {
+                    speakCurrentWord()
                 }
             }
         }
