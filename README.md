@@ -11,6 +11,16 @@ LittleTutor is an integrated Android learning companion designed for elementary 
 
 This app aims to act as a "personal tutor," helping children review their lessons systematically while providing parents with clear learning data.
 
+### 📸 Screenshots
+
+| Home | Manage Units | Camera / OCR | Lasso Selection |
+| :---: | :---: | :---: | :---: |
+| ![Home](screenshots/home.png) | ![Manage](screenshots/home2.png) | ![Camera](screenshots/camera.png) | ![Lasso](screenshots/ocr_lasso.png) |
+
+| Handwriting Test | Test Mode | Round Result | Analytics |
+| :---: | :---: | :---: | :---: |
+| ![Handwriting](screenshots/test.png) | ![Testing](screenshots/new_test.png) | ![Result](screenshots/test_result.png) | ![History](screenshots/history.png) |
+
 ### 🚀 Core Features
 
 #### 📸 Rapid Textbook Digitization
@@ -48,6 +58,16 @@ This app aims to act as a "personal tutor," helping children review their lesson
 LittleTutor 是一款專為小學生設計的整合式 Android 學習夥伴，專注於中英文詞彙的掌握。它結合了高精準度的 OCR 文字辨識、互動式手寫測試與個人化進度追蹤，將實體教科書與數位學習接軌。
 
 本應用程式致力於扮演「個人家教」的角色，協助孩子有系統地複習課文，同時為家長提供清晰的學習數據。
+
+### 📸 介面截圖
+
+| 首頁 | 課文管理 | 拍照辨識 | 曲線圈選 |
+| :---: | :---: | :---: | :---: |
+| ![首頁](screenshots/home.png) | ![管理](screenshots/home2.png) | ![拍照](screenshots/camera.png) | ![圈選](screenshots/ocr_lasso.png) |
+
+| 手寫測試 | 測試模式 | 單輪結果 | 歷史統計 |
+| :---: | :---: | :---: | :---: |
+| ![手寫](screenshots/test.png) | ![測試](screenshots/new_test.png) | ![結果](screenshots/test_result.png) | ![歷史](screenshots/history.png) |
 
 ### 🚀 核心功能
 
