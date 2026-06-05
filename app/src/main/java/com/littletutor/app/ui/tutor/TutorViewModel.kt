@@ -82,6 +82,7 @@ data class LittleTutorUiState(
     val recognizedWritingText: String = "",
     val isWritingAnswerCorrect: Boolean? = null,
     val isWritingRoundFinished: Boolean = false,
+    val isWritingTestSaved: Boolean = false,
     val writingCorrectCount: Int = 0,
     val writingSpeechRate: Float = 1.0f,
     val writingTestResults: List<WritingTestResult> = emptyList(),
@@ -316,6 +317,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 recognizedWritingText = "",
                 isWritingAnswerCorrect = null,
                 isWritingRoundFinished = false,
+                isWritingTestSaved = false,
                 writingCorrectCount = 0,
                 isLessonActive = false
             )
@@ -437,6 +439,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 recognizedWritingText = "",
                 isWritingAnswerCorrect = null,
                 isWritingRoundFinished = false,
+                isWritingTestSaved = false,
                 writingCorrectCount = 0
             )
         }
@@ -454,7 +457,8 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 recognizedWritingText = "",
                 isWritingAnswerCorrect = null,
                 writingCorrectCount = 0,
-                writingTestResults = emptyList()
+                writingTestResults = emptyList(),
+                isWritingTestSaved = false
             )
         }
         writingResultsByIndex.clear()
@@ -469,14 +473,21 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun saveTestRecord() {
+        var shouldProceed = false
+        _uiState.update { 
+            if (it.isWritingTestSaved) return@update it
+            shouldProceed = true
+            it.copy(isWritingTestSaved = true)
+        }
+        if (!shouldProceed) return
+        
         val state = _uiState.value
         val currentUser = state.currentUser ?: return
         if (state.writingTestResults.isEmpty()) return
 
-        val selectedUnits = state.testUnits.filter { state.selectedTestUnitIds.contains(it.id) }
         val timestamp = System.currentTimeMillis()
 
-        // 儲存整合紀錄（所有選取的課文）
+        // 僅儲存一筆完整的測試紀錄（包含所有選取的課文名稱）
         val combinedRecord = TestRecord(
             timestamp = timestamp,
             unitTitle = getSelectedUnitsTitle(),
@@ -486,24 +497,6 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         )
         userSpaceManager.saveTestRecord(currentUser.id, combinedRecord)
 
-        // 若同時測試多個課文，也分別儲存各課文的個別紀錄
-        if (selectedUnits.size > 1) {
-            selectedUnits.forEach { unit ->
-                val unitWords = unit.words.map { it.trim() }.toSet()
-                val unitResults = state.writingTestResults.filter { it.word in unitWords }
-                if (unitResults.isNotEmpty()) {
-                    val unitRecord = TestRecord(
-                        timestamp = timestamp,
-                        unitTitle = unit.title,
-                        totalCount = unitResults.size,
-                        correctCount = unitResults.count { it.isCorrect },
-                        results = unitResults
-                    )
-                    userSpaceManager.saveTestRecord(currentUser.id, unitRecord)
-                }
-            }
-        }
-
         loadScoreHistory()
     }
 
@@ -511,13 +504,12 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         val currentUser = _uiState.value.currentUser ?: return
         var records = userSpaceManager.loadTestRecords(currentUser.id)
 
-        // 若指定 unitId，顯示完全符合的課文紀錄，以及包含該課文的整合紀錄
+        // 若指定 unitId，則顯示標題中精確包含該課文名稱的紀錄
         if (unitId != null) {
             val targetUnit = _uiState.value.testUnits.firstOrNull { it.id == unitId }
             if (targetUnit != null) {
                 records = records.filter { record ->
-                    record.unitTitle == targetUnit.title ||
-                    record.unitTitle.split(", ").contains(targetUnit.title)
+                    record.unitTitle.split(", ").map { it.trim() }.contains(targetUnit.title)
                 }
             }
         }
@@ -550,6 +542,18 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun closeScoreHistory() {
         _uiState.update { it.copy(isScoreHistoryOpen = false, scoreHistoryUnitId = null) }
+    }
+
+    fun clearScoreHistory() {
+        val state = _uiState.value
+        val currentUser = state.currentUser ?: return
+        val unitId = state.scoreHistoryUnitId
+        val unitTitle = if (unitId != null) {
+            state.testUnits.firstOrNull { it.id == unitId }?.title
+        } else null
+        
+        userSpaceManager.clearTestRecords(currentUser.id, unitTitle)
+        loadScoreHistory(unitId)
     }
 
     fun openEditSelectedUnit() {

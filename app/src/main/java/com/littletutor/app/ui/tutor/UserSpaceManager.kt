@@ -230,7 +230,7 @@ class UserSpaceManager(private val rootDir: File) {
 
         writeTestUnits(userId, keptUnits)
 
-        // 刪除孤立照片：已不被任何剩餘課文參照的照片
+        // 刪除孤立照片
         val keptPhotos = keptUnits.flatMap { it.photoPaths }.toSet()
         val photoDirCanonical = userPhotosDirectory(userId).canonicalFile
         deletedUnits.flatMap { it.photoPaths }.toSet()
@@ -242,37 +242,64 @@ class UserSpaceManager(private val rootDir: File) {
                 }
             }
 
-        // 刪除測試紀錄：只刪除 unitTitle 完全等於被刪課文名稱的紀錄
-        // （跨課文的整合紀錄標題如「第一課, 第二課」，只要其中一課被刪就一起移除）
+        // 刪除測試紀錄
         val deletedTitles = deletedUnits.map { it.title }.toSet()
-        val recordsDir = File(userDirectory(userId), "test_records")
-        if (recordsDir.exists()) {
-            val recordFile = File(recordsDir, "records.csv")
-            if (recordFile.exists()) {
-                val linesToKeep = mutableListOf<String>()
-                recordFile.readLines().filter { it.isNotBlank() }.forEach { line ->
-                    val parts = line.split("\u0001")
-                    if (parts.size == 5) {
-                        val recordId = parts[0].trim()
-                        val unitTitle = decode(parts[2].trim())
-                        // 刪除：完全符合 OR 整合紀錄中包含已刪課文
-                        val titlesInRecord = unitTitle.split(", ").toSet()
-                        val shouldDelete = titlesInRecord.any { it in deletedTitles }
-                        if (shouldDelete) {
-                            // 一併刪除對應的 results 檔案
-                            File(recordsDir, "${recordId}_results.txt").takeIf { it.exists() }?.delete()
-                        } else {
-                            linesToKeep += line
-                        }
-                    } else {
-                        linesToKeep += line
-                    }
-                }
-                recordFile.writeText(linesToKeep.joinToString("\n"))
-            }
-        }
+        deleteRecordsByIncludedTitles(userId, deletedTitles)
 
         return deletedCount
+    }
+
+    private fun deleteRecordsByIncludedTitles(userId: String, targetTitles: Set<String>) {
+        val recordsDir = File(userDirectory(userId), "test_records")
+        if (!recordsDir.exists()) return
+
+        val recordFile = File(recordsDir, "records.csv")
+        if (!recordFile.exists()) return
+
+        val linesToKeep = mutableListOf<String>()
+        recordFile.readLines().filter { it.isNotBlank() }.forEach { line ->
+            val parts = line.split("|")
+            if (parts.size == 5) {
+                val recordId = parts[0].trim()
+                val unitTitle = decode(parts[2].trim())
+                val titlesInRecord = unitTitle.split(", ").map { it.trim() }.toSet()
+                val shouldDelete = titlesInRecord.any { it in targetTitles }
+                if (shouldDelete) {
+                    File(recordsDir, "${recordId}_results.txt").takeIf { it.exists() }?.delete()
+                } else {
+                    linesToKeep += line
+                }
+            } else {
+                linesToKeep += line
+            }
+        }
+        recordFile.writeText(linesToKeep.joinToString("\n"))
+    }
+
+    private fun deleteRecordsByExactTitle(userId: String, targetTitle: String) {
+        val recordsDir = File(userDirectory(userId), "test_records")
+        if (!recordsDir.exists()) return
+
+        val recordFile = File(recordsDir, "records.csv")
+        if (!recordFile.exists()) return
+
+        val linesToKeep = mutableListOf<String>()
+        recordFile.readLines().filter { it.isNotBlank() }.forEach { line ->
+            val parts = line.split("|")
+            if (parts.size == 5) {
+                val recordId = parts[0].trim()
+                val unitTitle = decode(parts[2].trim())
+                val shouldDelete = unitTitle == targetTitle
+                if (shouldDelete) {
+                    File(recordsDir, "${recordId}_results.txt").takeIf { it.exists() }?.delete()
+                } else {
+                    linesToKeep += line
+                }
+            } else {
+                linesToKeep += line
+            }
+        }
+        recordFile.writeText(linesToKeep.joinToString("\n"))
     }
 
     fun createPhotoFile(userId: String): File {
@@ -481,8 +508,9 @@ class UserSpaceManager(private val rootDir: File) {
             append(record.correctCount)
         }
 
-        val existingRecords = if (recordFile.exists()) recordFile.readText() + "\n" else ""
-        recordFile.writeText(existingRecords + csvLine)
+        val existingContent = if (recordFile.exists()) recordFile.readText().trim() else ""
+        val newContent = if (existingContent.isEmpty()) csvLine else existingContent + "\n" + csvLine
+        recordFile.writeText(newContent)
     }
 
     fun loadTestRecords(userId: String): List<TestRecord> {
@@ -550,6 +578,17 @@ class UserSpaceManager(private val rootDir: File) {
             }
 
         return records
+    }
+
+    fun clearTestRecords(userId: String, unitTitle: String? = null) {
+        if (unitTitle == null) {
+            val recordsDir = File(userDirectory(userId), "test_records")
+            if (recordsDir.exists()) {
+                recordsDir.deleteRecursively()
+            }
+        } else {
+            deleteRecordsByExactTitle(userId, unitTitle)
+        }
     }
 
     companion object {

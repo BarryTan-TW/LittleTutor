@@ -243,6 +243,7 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
             ScoreHistoryDialog(
                 testRecords = uiState.testRecords,
                 wordStatistics = uiState.wordStatistics,
+                onClearHistory = viewModel::clearScoreHistory,
                 onDismiss = viewModel::closeScoreHistory
             )
         }
@@ -1278,6 +1279,7 @@ private fun SettingsDialog(
 private fun ScoreHistoryDialog(
     testRecords: List<com.littletutor.app.ui.tutor.TestRecord>,
     wordStatistics: List<com.littletutor.app.ui.tutor.WordStatistics>,
+    onClearHistory: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val leftScrollState = rememberScrollState()
@@ -1285,7 +1287,14 @@ private fun ScoreHistoryDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(text = "關閉") } },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onClearHistory) {
+                    Text(text = "刪除歷史資料", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDismiss) { Text(text = "關閉") }
+            }
+        },
         title = { Text(text = "歷史成績與分析") },
         modifier = Modifier.fillMaxWidth(0.95f).heightIn(max = 700.dp),
         text = {
@@ -1367,4 +1376,3 @@ private fun ScoreHistoryDialog(
         }
     )
 }
-
