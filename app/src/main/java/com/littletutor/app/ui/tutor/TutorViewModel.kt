@@ -281,11 +281,39 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun toggleTestUnitSelection(unitId: String) {
         _uiState.update {
-            val next = it.selectedTestUnitIds.toMutableSet()
-            if (!next.add(unitId)) {
-                next.remove(unitId)
+            // 改為單選邏輯：點擊已選中的則取消，點擊未選中的則切換選中該項
+            val next = if (it.selectedTestUnitIds.contains(unitId)) {
+                emptySet()
+            } else {
+                setOf(unitId)
             }
             it.copy(selectedTestUnitIds = next)
+        }
+    }
+
+    fun moveTestUnitUp() {
+        val currentUser = _uiState.value.currentUser ?: return
+        val selectedId = _uiState.value.selectedTestUnitIds.firstOrNull() ?: return
+        val units = _uiState.value.testUnits
+        val index = units.indexOfFirst { it.id == selectedId }
+        if (index > 0) {
+            userSpaceManager.moveTestUnit(currentUser.id, index, index - 1)
+            reloadFromStorage(preserveLessonState = true)
+            // 保持選取
+            _uiState.update { it.copy(selectedTestUnitIds = setOf(selectedId)) }
+        }
+    }
+
+    fun moveTestUnitDown() {
+        val currentUser = _uiState.value.currentUser ?: return
+        val selectedId = _uiState.value.selectedTestUnitIds.firstOrNull() ?: return
+        val units = _uiState.value.testUnits
+        val index = units.indexOfFirst { it.id == selectedId }
+        if (index >= 0 && index < units.size - 1) {
+            userSpaceManager.moveTestUnit(currentUser.id, index, index + 1)
+            reloadFromStorage(preserveLessonState = true)
+            // 保持選取
+            _uiState.update { it.copy(selectedTestUnitIds = setOf(selectedId)) }
         }
     }
 

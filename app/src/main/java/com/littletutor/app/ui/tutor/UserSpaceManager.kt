@@ -249,6 +249,15 @@ class UserSpaceManager(private val rootDir: File) {
         return deletedCount
     }
 
+    fun moveTestUnit(userId: String, fromIndex: Int, toIndex: Int): Boolean {
+        val allUnits = loadTestUnits(userId).toMutableList()
+        if (fromIndex !in allUnits.indices || toIndex !in allUnits.indices) return false
+        val unit = allUnits.removeAt(fromIndex)
+        allUnits.add(toIndex, unit)
+        writeTestUnits(userId, allUnits)
+        return true
+    }
+
     private fun deleteRecordsByIncludedTitles(userId: String, targetTitles: Set<String>) {
         val recordsDir = File(userDirectory(userId), "test_records")
         if (!recordsDir.exists()) return

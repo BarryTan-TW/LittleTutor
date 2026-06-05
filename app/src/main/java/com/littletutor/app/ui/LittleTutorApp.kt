@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,8 +49,10 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -116,6 +120,7 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) {
         viewModel.onPhotoCaptured(it)
     }
+    var showDeleteUnitConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -177,9 +182,11 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
                 onTogglePhotoSelection = viewModel::togglePhotoSelection,
                 onDeleteSelectedPhotos = viewModel::deleteSelectedPhotos,
                 onToggleTestUnitSelection = viewModel::toggleTestUnitSelection,
+                onMoveUp = viewModel::moveTestUnitUp,
+                onMoveDown = viewModel::moveTestUnitDown,
                 onAddUnit = viewModel::openAddUnitDialog,
                 onEditSelectedUnit = viewModel::openEditSelectedUnit,
-                onDeleteSelectedUnits = viewModel::deleteSelectedTestUnits,
+                onDeleteSelectedUnits = { showDeleteUnitConfirm = true },
                 onStartSelectedUnitsTest = viewModel::startSelectedUnitsTest
             )
         }
@@ -247,6 +254,29 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
                 onDismiss = viewModel::closeScoreHistory
             )
         }
+
+        if (showDeleteUnitConfirm) {
+            AlertDialog(
+                onDismissRequest = { showDeleteUnitConfirm = false },
+                title = { Text(text = "確認刪除") },
+                text = { Text(text = "您確定要刪除選取的課文單元嗎？這項動作無法復原。") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteSelectedTestUnits()
+                            showDeleteUnitConfirm = false
+                        }
+                    ) {
+                        Text(text = "確定刪除", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteUnitConfirm = false }) {
+                        Text(text = "取消")
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -260,6 +290,8 @@ private fun HomeScreen(
     onTogglePhotoSelection: (String) -> Unit,
     onDeleteSelectedPhotos: () -> Unit,
     onToggleTestUnitSelection: (String) -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onAddUnit: () -> Unit,
     onEditSelectedUnit: () -> Unit,
     onDeleteSelectedUnits: () -> Unit,
@@ -361,6 +393,8 @@ private fun HomeScreen(
             testUnits = uiState.testUnits,
             selectedUnitIds = uiState.selectedTestUnitIds,
             onToggleSelection = onToggleTestUnitSelection,
+            onMoveUp = onMoveUp,
+            onMoveDown = onMoveDown,
             onAddUnit = onAddUnit,
             onEditSelectedUnit = onEditSelectedUnit,
             onDeleteSelectedUnits = onDeleteSelectedUnits,
@@ -721,7 +755,7 @@ private fun WritingBoard(
                 .pointerInput(Unit) {
                     detectDragGestures(
                         onDragStart = { offset ->
-                            activeStroke = listOf(offset)
+                            activeStroke = offset.let { listOf(it) }
                             onClearRecognition()
                         },
                         onDrag = { change, _ ->
@@ -808,6 +842,8 @@ private fun TestUnitSection(
     testUnits: List<TestUnit>,
     selectedUnitIds: Set<String>,
     onToggleSelection: (String) -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
     onAddUnit: () -> Unit,
     onEditSelectedUnit: () -> Unit,
     onDeleteSelectedUnits: () -> Unit,
@@ -847,9 +883,9 @@ private fun TestUnitSection(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                Checkbox(
-                                    checked = selectedUnitIds.contains(unit.id),
-                                    onCheckedChange = { onToggleSelection(unit.id) }
+                                RadioButton(
+                                    selected = selectedUnitIds.contains(unit.id),
+                                    onClick = { onToggleSelection(unit.id) }
                                 )
                                 Text(text = "${unit.title}（${unit.words.size} 個字詞）")
                             }
@@ -863,13 +899,19 @@ private fun TestUnitSection(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Button(onClick = onStartSelectedUnitsTest, enabled = selectedUnitIds.isNotEmpty(), modifier = Modifier.weight(1f)) {
+                    Button(onClick = onStartSelectedUnitsTest, enabled = selectedUnitIds.isNotEmpty(), modifier = Modifier.weight(0.30f)) {
                         Text(text = "開始測試")
                     }
-                    Button(onClick = onEditSelectedUnit, enabled = selectedUnitIds.size == 1, modifier = Modifier.weight(1f)) {
+                    Button(onClick = onEditSelectedUnit, enabled = selectedUnitIds.size == 1, modifier = Modifier.weight(0.30f)) {
                         Text(text = "編輯內容")
                     }
-                    Button(onClick = onDeleteSelectedUnits, enabled = selectedUnitIds.isNotEmpty(), modifier = Modifier.weight(1f)) {
+                    Button(onClick = onMoveUp, enabled = selectedUnitIds.size == 1, modifier = Modifier.weight(0.15f)) {
+                        Text(text = "上移")
+                    }
+                    Button(onClick = onMoveDown, enabled = selectedUnitIds.size == 1, modifier = Modifier.weight(0.15f)) {
+                        Text(text = "下移")
+                    }
+                    Button(onClick = onDeleteSelectedUnits, enabled = selectedUnitIds.isNotEmpty(), modifier = Modifier.weight(0.10f)) {
                         Text(text = "刪除")
                     }
                 }
@@ -878,6 +920,7 @@ private fun TestUnitSection(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddTestUnitDialog(
     title: String,
@@ -887,22 +930,60 @@ private fun AddTestUnitDialog(
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onSave, enabled = title.isNotBlank() && words.isNotBlank()) { Text(text = "新增") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(text = "取消") } },
-        title = { Text(text = "新增測試項目") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = onTitleChange, label = { Text(text = "課文單元名稱") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = words, onValueChange = onWordsChange, label = { Text(text = "字詞（可用 、 或換行分隔）") }, modifier = Modifier.fillMaxWidth(), minLines = 4)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(text = "新增測試項目") },
+                    navigationIcon = {
+                        TextButton(onClick = onDismiss) { Text(text = "取消") }
+                    },
+                    actions = {
+                        TextButton(
+                            onClick = onSave,
+                            enabled = title.isNotBlank() && words.isNotBlank()
+                        ) {
+                            Text(text = "新增")
+                        }
+                    }
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    label = { Text(text = "課文單元名稱") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = words,
+                    onValueChange = onWordsChange,
+                    label = { Text(text = "字詞（可用 、 或換行分隔）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 10
+                )
             }
         }
-    )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EditTestUnitDialog(
     title: String,
@@ -912,20 +993,57 @@ private fun EditTestUnitDialog(
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(onClick = onSave, enabled = title.isNotBlank() && words.isNotBlank()) { Text(text = "儲存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(text = "取消") } },
-        title = { Text(text = "編輯內容") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = onTitleChange, label = { Text(text = "課文單元名稱") }, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = words, onValueChange = onWordsChange, label = { Text(text = "字詞（可用 、 或換行分隔）") }, modifier = Modifier.fillMaxWidth(), minLines = 4)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text(text = "編輯內容") },
+                    navigationIcon = {
+                        TextButton(onClick = onDismiss) { Text(text = "取消") }
+                    },
+                    actions = {
+                        TextButton(
+                            onClick = onSave,
+                            enabled = title.isNotBlank() && words.isNotBlank()
+                        ) {
+                            Text(text = "儲存")
+                        }
+                    }
+                )
+            },
+            modifier = Modifier.fillMaxSize()
+        ) { innerPadding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .imePadding()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = onTitleChange,
+                    label = { Text(text = "課文單元名稱") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = words,
+                    onValueChange = onWordsChange,
+                    label = { Text(text = "字詞（可用 、 或換行分隔）") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 10
+                )
             }
         }
-    )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -947,85 +1065,93 @@ private fun DirectSelectPreviewDialog(
     var titleMenuExpanded by remember { mutableStateOf(false) }
     val lassoSelectionHistory = remember { mutableStateListOf<Set<Int>>() }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(text = "照片預覽 - 直接圈選") },
-                    navigationIcon = { TextButton(onClick = onDismiss) { Text(text = "關閉") } },
-                    actions = {
-                        TextButton(onClick = onSave, enabled = unitTitle.isNotBlank() && selectedTokenIndexes.isNotEmpty()) {
-                            Text(text = "儲存到課文")
+    Dialog(
+        onDismissRequest = onDismiss, 
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(modifier = Modifier.fillMaxSize().imePadding()) {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text(text = "照片預覽 - 直接圈選") },
+                        navigationIcon = { TextButton(onClick = onDismiss) { Text(text = "關閉") } },
+                        actions = {
+                            TextButton(onClick = onSave, enabled = unitTitle.isNotBlank() && selectedTokenIndexes.isNotEmpty()) {
+                                Text(text = "儲存到課文")
+                            }
+                        }
+                    )
+                }
+            ) { innerPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = unitTitle,
+                        onValueChange = onUnitTitleChange,
+                        label = { Text("課文單元名稱") },
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        TextButton(onClick = { titleMenuExpanded = true }) { Text(text = "選取既有課文單元") }
+                        DropdownMenu(expanded = titleMenuExpanded, onDismissRequest = { titleMenuExpanded = false }) {
+                            existingUnitTitles.forEach { title ->
+                                DropdownMenuItem(
+                                    text = { Text(text = title) },
+                                    onClick = { onUnitTitleChange(title); titleMenuExpanded = false }
+                                )
+                            }
                         }
                     }
-                )
-            }
-        ) { innerPadding ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = unitTitle,
-                    onValueChange = onUnitTitleChange,
-                    label = { Text("課文單元名稱") },
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.None),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    TextButton(onClick = { titleMenuExpanded = true }) { Text(text = "選取既有課文單元") }
-                    DropdownMenu(expanded = titleMenuExpanded, onDismissRequest = { titleMenuExpanded = false }) {
-                        existingUnitTitles.forEach { title ->
-                            DropdownMenuItem(
-                                text = { Text(text = title) },
-                                onClick = { onUnitTitleChange(title); titleMenuExpanded = false }
-                            )
+                    if (isLoading) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Text(text = "正在辨識文字...")
                         }
                     }
-                }
-                if (isLoading) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Text(text = "正在辨識文字...")
+                    SelectablePhotoPreview(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        photoPath = photoPath,
+                        previewTokens = previewTokens,
+                        selectedTokenIndexes = selectedTokenIndexes,
+                        onToggleToken = onToggleToken,
+                        onSetTokenSelected = onSetTokenSelected,
+                        onLassoApplied = { previousSelectedSet -> lassoSelectionHistory += previousSelectedSet }
+                    )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { onApplySelectedSet(previewTokens.indices.toSet() - selectedTokenIndexes) }) {
+                            Text(text = "圈選後反選")
+                        }
+                        TextButton(onClick = { onApplySelectedSet(emptySet()) }) { Text(text = "清空選取") }
+                        TextButton(
+                            onClick = {
+                                val previous = lassoSelectionHistory.lastOrNull() ?: return@TextButton
+                                onApplySelectedSet(previous)
+                                lassoSelectionHistory.removeAt(lassoSelectionHistory.lastIndex)
+                            },
+                            enabled = lassoSelectionHistory.isNotEmpty()
+                        ) { Text(text = "撤銷上一筆曲線") }
                     }
+                    Text(text = "提示：可點擊框選單字，優化：長按可圈選文字", style = MaterialTheme.typography.bodySmall)
+                    val selectedTexts = previewTokens.filterIndexed { index, _ -> selectedTokenIndexes.contains(index) }.joinToString(separator = "、") { it.text }
+                    OutlinedTextField(
+                        value = selectedTexts,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(text = "圈選後自動轉文字") },
+                        placeholder = { Text(text = "尚未選取文字") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2
+                    )
                 }
-                SelectablePhotoPreview(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    photoPath = photoPath,
-                    previewTokens = previewTokens,
-                    selectedTokenIndexes = selectedTokenIndexes,
-                    onToggleToken = onToggleToken,
-                    onSetTokenSelected = onSetTokenSelected,
-                    onLassoApplied = { previousSelectedSet -> lassoSelectionHistory += previousSelectedSet }
-                )
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { onApplySelectedSet(previewTokens.indices.toSet() - selectedTokenIndexes) }) {
-                        Text(text = "圈選後反選")
-                    }
-                    TextButton(onClick = { onApplySelectedSet(emptySet()) }) { Text(text = "清空選取") }
-                    TextButton(
-                        onClick = {
-                            val previous = lassoSelectionHistory.lastOrNull() ?: return@TextButton
-                            onApplySelectedSet(previous)
-                            lassoSelectionHistory.removeAt(lassoSelectionHistory.lastIndex)
-                        },
-                        enabled = lassoSelectionHistory.isNotEmpty()
-                    ) { Text(text = "撤銷上一筆曲線") }
-                }
-                Text(text = "提示：可點擊框選單字，或按住拖曳畫自由曲線一次圈選多個字詞", style = MaterialTheme.typography.bodySmall)
-                val selectedTexts = previewTokens.filterIndexed { index, _ -> selectedTokenIndexes.contains(index) }.joinToString(separator = "、") { it.text }
-                OutlinedTextField(
-                    value = selectedTexts,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text(text = "圈選後自動轉文字") },
-                    placeholder = { Text(text = "尚未選取文字") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2
-                )
             }
         }
     }
@@ -1099,7 +1225,7 @@ private fun SelectablePhotoPreview(
                                             imageFrame.left + token.right * imageFrame.scale,
                                             imageFrame.top + token.bottom * imageFrame.scale
                                         )
-                                        if (isTokenHitByLasso(tokenRect, center, polygon)) onSetTokenSelected(index, true)
+                                        if (isPointInPolygon(center, polygon)) onSetTokenSelected(index, true)
                                     }
                                 }
                                 lassoPoints = emptyList()
@@ -1234,45 +1360,80 @@ private fun SettingsDialog(
     onSetTestingMode: (TestingMode) -> Unit,
     onDismiss: () -> Unit
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = { TextButton(onClick = onDismiss) { Text(text = "完成") } },
-        title = { Text(text = "設定") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = newUserName, onValueChange = onNewUserNameChange, label = { Text("新使用者名稱") }, modifier = Modifier.fillMaxWidth())
-                Button(onClick = onAddUser, modifier = Modifier.fillMaxWidth()) { Text(text = "新增使用者") }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(text = "切換 / 刪除使用者", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                users.forEach { user ->
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(text = user.displayName + if (user.id == currentUserId) "（目前）" else "", modifier = Modifier.weight(1f))
-                        TextButton(onClick = { onSwitchUser(user.id) }) { Text(text = "切換") }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        TextButton(onClick = { onDeleteUser(user.id) }) { Text(text = "刪除") }
+    Dialog(
+        onDismissRequest = onDismiss, 
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .padding(horizontal = 24.dp, vertical = 40.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(text = "設定", style = MaterialTheme.typography.headlineSmall)
+                    val scrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .verticalScroll(scrollState)
+                            .simpleVerticalScrollbar(scrollState),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedTextField(value = newUserName, onValueChange = onNewUserNameChange, label = { Text("新使用者名稱") }, modifier = Modifier.fillMaxWidth())
+                        Button(onClick = onAddUser, modifier = Modifier.fillMaxWidth()) { Text(text = "新增使用者") }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(text = "切換 / 刪除使用者", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        users.forEach { user ->
+                            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(text = user.displayName + if (user.id == currentUserId) "（目前）" else "", modifier = Modifier.weight(1f))
+                                TextButton(onClick = { onSwitchUser(user.id) }) { Text(text = "切換") }
+                                Spacer(modifier = Modifier.width(4.dp))
+                                TextButton(onClick = { onDeleteUser(user.id) }) { Text(text = "刪除") }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "測試方式", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { onSetTestingMode(TestingMode.WRITING_BOARD) },
+                                modifier = Modifier.weight(1f),
+                                colors = if (testingMode == TestingMode.WRITING_BOARD) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
+                            ) { Text(text = "畫板書寫") }
+                            Button(
+                                onClick = { onSetTestingMode(TestingMode.MANUAL_CONFIRM) },
+                                modifier = Modifier.weight(1f),
+                                colors = if (testingMode == TestingMode.MANUAL_CONFIRM) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
+                            ) { Text(text = "自行確認") }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(text = "關於", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text(text = "作者：Barry Tan")
+                        Text(text = "Email：shihhong.tan@gmail.com")
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(onClick = onDismiss) { Text(text = "完成") }
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "測試方式", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { onSetTestingMode(TestingMode.WRITING_BOARD) },
-                        modifier = Modifier.weight(1f),
-                        colors = if (testingMode == TestingMode.WRITING_BOARD) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
-                    ) { Text(text = "畫板書寫") }
-                    Button(
-                        onClick = { onSetTestingMode(TestingMode.MANUAL_CONFIRM) },
-                        modifier = Modifier.weight(1f),
-                        colors = if (testingMode == TestingMode.MANUAL_CONFIRM) ButtonDefaults.buttonColors() else ButtonDefaults.outlinedButtonColors()
-                    ) { Text(text = "自行確認") }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(text = "關於", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Text(text = "作者：Barry Tan")
-                Text(text = "Email：shihhong.tan@gmail.com")
             }
         }
-    )
+    }
 }
 
 @Composable
@@ -1321,17 +1482,42 @@ private fun ScoreHistoryDialog(
                             ) {
                                 if (testRecords.isNotEmpty()) {
                                     testRecords.forEach { record ->
-                                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                        ) {
                                             Column(modifier = Modifier.padding(12.dp)) {
-                                                val dateFormat = java.text.SimpleDateFormat("MM/dd HH:mm")
-                                                Text(text = dateFormat.format(record.timestamp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Text(text = record.unitTitle, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-                                                Text(text = "成績：${record.correctCount}/${record.totalCount} (${String.format("%.1f%%", record.getAccuracy() * 100)})", style = MaterialTheme.typography.bodySmall)
+                                                val dateFormat =
+                                                    java.text.SimpleDateFormat("MM/dd HH:mm")
+                                                Text(
+                                                    text = dateFormat.format(record.timestamp),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = record.unitTitle,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                Text(
+                                                    text = "成績：${record.correctCount}/${record.totalCount} (${
+                                                        String.format(
+                                                            "%.1f%%",
+                                                            record.getAccuracy() * 100
+                                                        )
+                                                    })",
+                                                    style = MaterialTheme.typography.bodySmall
+                                                )
                                             }
                                         }
                                     }
                                 } else {
-                                    Text(text = "暫無考試記錄", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
+                                    Text(
+                                        text = "暫無考試記錄",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 16.dp)
+                                    )
                                 }
                             }
                         }
@@ -1339,8 +1525,18 @@ private fun ScoreHistoryDialog(
 
                     // 右欄：需要加強的字詞
                     Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
-                        Text(text = "📊 需要加強的字詞", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(bottom = 4.dp))
-                        Text(text = "（按失敗率排序）", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+                        Text(
+                            text = "📊 需要加強的字詞",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 4.dp)
+                        )
+                        Text(
+                            text = "（按失敗率排序）",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
                         Box(modifier = Modifier.fillMaxWidth().weight(1f)) {
                             Column(
                                 modifier = Modifier
@@ -1351,22 +1547,51 @@ private fun ScoreHistoryDialog(
                             ) {
                                 if (wordStatistics.isNotEmpty()) {
                                     wordStatistics.forEach { stats ->
-                                        Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0))) {
-                                            Row(modifier = Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                                Text(text = stats.word, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = CardDefaults.cardColors(
+                                                containerColor = Color(0xFFFFF3E0)
+                                            )
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth()
+                                                    .padding(12.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = stats.word,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.weight(1f)
+                                                )
                                                 Column(horizontalAlignment = Alignment.End) {
-                                                    Text(text = "✓${stats.correctCount} ✗${stats.totalAttempts - stats.correctCount}", style = MaterialTheme.typography.labelSmall)
                                                     Text(
-                                                        text = "失敗率: ${String.format("%.1f%%", stats.getErrorRate() * 100)}",
+                                                        text = "✓${stats.correctCount} ✗${stats.totalAttempts - stats.correctCount}",
+                                                        style = MaterialTheme.typography.labelSmall
+                                                    )
+                                                    Text(
+                                                        text = "失敗率: ${
+                                                            String.format(
+                                                                "%.1f%%",
+                                                                stats.getErrorRate() * 100
+                                                            )
+                                                        }",
                                                         style = MaterialTheme.typography.labelSmall,
-                                                        color = if (stats.getErrorRate() > 0.5f) Color(0xFFC62828) else Color(0xFF2E7D32)
+                                                        color = if (stats.getErrorRate() > 0.5f) Color(
+                                                            0xFFC62828
+                                                        ) else Color(0xFF2E7D32)
                                                     )
                                                 }
                                             }
                                         }
                                     }
                                 } else {
-                                    Text(text = "暫無字詞統計", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 16.dp))
+                                    Text(
+                                        text = "暫無字詞統計",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 16.dp)
+                                    )
                                 }
                             }
                         }
