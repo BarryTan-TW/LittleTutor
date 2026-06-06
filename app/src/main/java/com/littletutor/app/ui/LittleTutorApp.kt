@@ -78,6 +78,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -87,6 +88,7 @@ import com.littletutor.app.ui.tutor.TestUnit
 import com.littletutor.app.ui.tutor.TestingMode
 import com.littletutor.app.ui.tutor.TutorViewModel
 import com.littletutor.app.ui.tutor.UserSpace
+import com.littletutor.app.ui.tutor.ZhuyinHelper
 
 // Draws a simple vertical scrollbar on the right edge of a scrollable Column.
 private fun Modifier.simpleVerticalScrollbar(
@@ -110,6 +112,51 @@ private fun Modifier.simpleVerticalScrollbar(
         topLeft = Offset(size.width - barWidth, thumbTop),
         size = androidx.compose.ui.geometry.Size(barWidth, thumbHeight.coerceAtLeast(24f))
     )
+}
+
+/**
+ * 注音顯示組件
+ * 每個中文字上方顯示對應的注音。
+ */
+@Composable
+fun ZhuyinText(
+    text: String,
+    modifier: Modifier = Modifier,
+    fontSize: androidx.compose.ui.unit.TextUnit = 24.sp,
+    color: Color = Color.Unspecified
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.Start
+    ) {
+        text.forEach { char ->
+            val zhuyin = ZhuyinHelper.getZhuyin(char)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Bottom,
+                modifier = Modifier.padding(horizontal = 1.dp)
+            ) {
+                if (zhuyin.isNotEmpty()) {
+                    Text(
+                        text = zhuyin,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        fontSize = (fontSize.value * 0.4f).sp,
+                        lineHeight = (fontSize.value * 0.4f).sp,
+                        modifier = Modifier.padding(bottom = 0.dp)
+                    )
+                }
+                Text(
+                    text = char.toString(),
+                    fontSize = fontSize,
+                    fontWeight = FontWeight.Bold,
+                    lineHeight = fontSize,
+                    color = color
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -399,10 +446,10 @@ private fun WritingTestScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9))
                             ) {
-                                Text(
+                                ZhuyinText(
                                     text = result.word,
                                     modifier = Modifier.padding(12.dp),
-                                    style = MaterialTheme.typography.bodyLarge
+                                    fontSize = MaterialTheme.typography.bodyLarge.fontSize
                                 )
                             }
                         }
@@ -438,10 +485,10 @@ private fun WritingTestScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = Color(0xFFFFCDD2))
                             ) {
-                                Text(
+                                ZhuyinText(
                                     text = result.word,
                                     modifier = Modifier.padding(12.dp),
-                                    style = MaterialTheme.typography.bodyLarge
+                                    fontSize = MaterialTheme.typography.bodyLarge.fontSize
                                 )
                             }
                         }
@@ -501,17 +548,26 @@ private fun WritingTestScreen(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        text = if (uiState.writingShowAnswer) {
-                            "請書寫：${currentWord ?: ""}"
-                        } else {
-                            val wordLength = currentWord?.length ?: 0
-                            val questionMarks = "？".repeat(wordLength)
-                            "請書寫：$questionMarks "
-                        },
-                        style = MaterialTheme.typography.headlineSmall
+                        text = "請書寫：",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(bottom = 2.dp)
                     )
+                    if (uiState.writingShowAnswer && currentWord != null) {
+                        ZhuyinText(
+                            text = currentWord,
+                            fontSize = MaterialTheme.typography.headlineSmall.fontSize
+                        )
+                    } else {
+                        val wordLength = currentWord?.length ?: 0
+                        Text(
+                            text = "？".repeat(wordLength),
+                            style = MaterialTheme.typography.headlineSmall,
+                            modifier = Modifier.padding(bottom = 2.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
                     Button(
                         onClick = onToggleAnswerVisibility,
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
@@ -1411,7 +1467,11 @@ private fun QuizScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(text = "題目 ${uiState.currentQuestionNumber}/${uiState.totalQuestions}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text(text = currentQuestion.prompt, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        if (uiState.isAnswerChecked) {
+            ZhuyinText(text = currentQuestion.prompt, fontSize = MaterialTheme.typography.titleLarge.fontSize)
+        } else {
+            Text(text = currentQuestion.prompt, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        }
         OptionList(question = currentQuestion, selectedOptionIndex = uiState.selectedOptionIndex, isAnswerChecked = uiState.isAnswerChecked, onSelectOption = onSelectOption)
         Button(onClick = { if (uiState.isAnswerChecked) onNextQuestion() else onCheckAnswer() }, enabled = uiState.selectedOptionIndex != null, modifier = Modifier.fillMaxWidth()) {
             Text(text = if (uiState.isAnswerChecked) "下一題" else "確認")
@@ -1436,7 +1496,13 @@ private fun OptionList(question: Question, selectedOptionIndex: Int?, isAnswerCh
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
             Card(onClick = { if (!isAnswerChecked) onSelectOption(index) }, modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
-                Text(text = optionText, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(16.dp))
+                Box(modifier = Modifier.padding(16.dp)) {
+                    if (isAnswerChecked) {
+                        ZhuyinText(text = optionText, fontSize = MaterialTheme.typography.bodyLarge.fontSize)
+                    } else {
+                        Text(text = optionText, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
             }
         }
     }
@@ -1663,10 +1729,9 @@ private fun ScoreHistoryDialog(
                                                     .padding(12.dp),
                                                 horizontalArrangement = Arrangement.SpaceBetween,
                                                 verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
+                                                ZhuyinText(
                                                     text = stats.word,
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = MaterialTheme.typography.bodyLarge.fontSize,
                                                     modifier = Modifier.weight(1f)
                                                 )
                                                 Column(horizontalAlignment = Alignment.End) {

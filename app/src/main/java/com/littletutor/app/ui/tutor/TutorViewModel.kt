@@ -778,6 +778,9 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         return enginesByUserId.getOrPut(userId) { TutorEngine() }
     }
 
+    fun getZhuyin(char: Char): String {
+        return ZhuyinHelper.getZhuyin(char)
+    }
 
     private suspend fun extractTokensFromPhoto(photoPath: String): List<OcrToken> {
         val image = runCatching {
