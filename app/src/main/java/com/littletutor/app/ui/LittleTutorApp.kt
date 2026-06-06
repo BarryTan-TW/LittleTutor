@@ -339,6 +339,16 @@ private fun WritingTestScreen(
 ) {
     val words = uiState.writingWordsRound
     val currentWord = words.getOrNull(uiState.writingCurrentIndex)
+    var lastClickTime by remember { mutableStateOf(0L) }
+    val debounceInterval = 1000L // 1秒防抖
+
+    fun handleConfirm(isCorrect: Boolean) {
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastClickTime >= debounceInterval) {
+            lastClickTime = currentTime
+            viewModel.confirmTestResult(isCorrect)
+        }
+    }
 
     if (uiState.isWritingRoundFinished) {
         Column(
@@ -491,28 +501,52 @@ private fun WritingTestScreen(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = if (uiState.writingShowAnswer) {
-                        "請書寫：${currentWord ?: ""}"
-                    } else {
-                        val wordLength = currentWord?.length ?: 0
-                        val questionMarks = "？".repeat(wordLength)
-                        "請書寫：$questionMarks（請按答案）"
-                    },
-                    style = MaterialTheme.typography.headlineSmall
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (uiState.writingShowAnswer) {
+                            "請書寫：${currentWord ?: ""}"
+                        } else {
+                            val wordLength = currentWord?.length ?: 0
+                            val questionMarks = "？".repeat(wordLength)
+                            "請書寫：$questionMarks "
+                        },
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Button(
+                        onClick = onToggleAnswerVisibility,
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(text = if (uiState.writingShowAnswer) "隱藏" else "答案")
+                    }
+                }
             }
             Button(onClick = onFinishTest) { Text(text = "退出") }
         }
 
         if (uiState.testingMode == TestingMode.WRITING_BOARD) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onReplayWord) { Text(text = "朗讀") }
-                Button(onClick = onToggleAnswerVisibility) {
-                    Text(text = if (uiState.writingShowAnswer) "隱藏答案" else "答案")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onReplayWord,
+                    modifier = Modifier.weight(2f)
+                ) {
+                    Text(text = "朗讀")
                 }
-                Button(onClick = onNextWord) { Text(text = "下一題") }
-                Button(onClick = onClearRecognition) { Text(text = "清除比對") }
+                Button(
+                    onClick = onNextWord,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = "下一題")
+                }
+                Button(
+                    onClick = onClearRecognition,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(text = "清除比對")
+                }
             }
 
             Column(
@@ -568,10 +602,15 @@ private fun WritingTestScreen(
             }
             Text(text = resultText, color = resultColor, style = MaterialTheme.typography.titleMedium)
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onReplayWord) { Text(text = "朗讀") }
-                Button(onClick = onToggleAnswerVisibility) {
-                    Text(text = if (uiState.writingShowAnswer) "隱藏答案" else "答案")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onReplayWord,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = "朗讀")
                 }
             }
 
@@ -606,7 +645,7 @@ private fun WritingTestScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Button(
-                    onClick = { viewModel.confirmTestResult(true) },
+                    onClick = { handleConfirm(true) },
                     modifier = Modifier
                         .weight(1f)
                         .height(60.dp),
@@ -615,7 +654,7 @@ private fun WritingTestScreen(
                     Text(text = "✓ 正確", fontSize = MaterialTheme.typography.titleLarge.fontSize)
                 }
                 Button(
-                    onClick = { viewModel.confirmTestResult(false) },
+                    onClick = { handleConfirm(false) },
                     modifier = Modifier
                         .weight(1f)
                         .height(60.dp),
