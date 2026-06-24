@@ -259,7 +259,10 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
                 onApplySelectedSet = viewModel::setPreviewSelectedTokenIndexes,
                 onUnitTitleChange = viewModel::updatePreviewUnitTitleInput,
                 onSave = viewModel::savePreviewSelectionToUnit,
-                onDismiss = viewModel::closePhotoPreview
+                onDismiss = {
+                    viewModel.closePhotoPreview()
+                    viewModel.closeAddUnitDialog()
+                }
             )
         }
 
@@ -284,7 +287,7 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
                 onTitleChange = viewModel::updateAddingUnitTitle,
                 onWordsChange = viewModel::updateAddingUnitWords,
                 onOpenPhotoArea = viewModel::openAddUnitPhotoArea,
-                onClosePhotoArea = viewModel::closeAddUnitPhotoArea,
+                onClosePhotoArea = viewModel::closeAddUnitDialog,
                 onTakePhoto = {
                     viewModel.preparePhotoCaptureUri()?.let { uri ->
                         cameraLauncher.launch(uri)
@@ -1239,6 +1242,7 @@ private fun DirectSelectPreviewDialog(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
+                    .imePadding() // 增加鍵盤避讓
                     .padding(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -1281,7 +1285,9 @@ private fun DirectSelectPreviewDialog(
 
                 // Right side: Controls and Text
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()), // 增加捲動能力，確保橫屏時鍵盤彈出仍能按到所有按鈕
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedTextField(
@@ -1309,8 +1315,8 @@ private fun DirectSelectPreviewDialog(
                         readOnly = true,
                         label = { Text(text = "圈選後自動轉文字") },
                         placeholder = { Text(text = "尚未選取文字") },
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        minLines = 8
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 300.dp), // 改用 heightIn 代替 weight，確保在捲動容器中顯示正常
+                        minLines = 5
                     )
                 }
             }
@@ -1599,7 +1605,7 @@ private fun SettingsDialog(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        TextButton(onClick = onDismiss) { Text(text = "完成") }
+                        Button(onClick = onDismiss) { Text(text = "完成") }
                     }
                 }
             }

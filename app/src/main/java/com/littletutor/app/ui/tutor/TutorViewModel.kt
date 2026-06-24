@@ -645,7 +645,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     fun saveAddedUnit() {
         val currentUser = _uiState.value.currentUser ?: return
         val parsedWords = _uiState.value.addingUnitWordsInput
-            .split('、', ',', '\n')
+            .split("[、，,\n\r]+".toRegex())
             .map { it.trim() }
             .filter { it.isNotEmpty() }
         val title = _uiState.value.addingUnitTitleInput.trim()
@@ -686,7 +686,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         val currentUser = _uiState.value.currentUser ?: return
         val editingId = _uiState.value.editingUnitId ?: return
         val parsedWords = _uiState.value.editingUnitWordsInput
-            .split('、', ',', '\n')
+            .split("[、，,\n\r]+".toRegex())
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
@@ -812,7 +812,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private suspend fun recognizeTextFromBitmap(bitmap: Bitmap): String {
         return runCatching {
             val image = InputImage.fromBitmap(bitmap, 0)
-            textRecognizer.process(image).await().text.replace("\\s+".toRegex(), "")
+            textRecognizer.process(image).await().text.trim()
         }.getOrDefault("")
     }
 
@@ -1005,6 +1005,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun normalizeWord(value: String): String {
         return value
+            .lowercase(Locale.getDefault())
             .replace("\\s+".toRegex(), "")
             .replace("[，。！？、；：,.!?;:\\-_=+\\[\\]{}()（）『』「」\"'`~]".toRegex(), "")
     }
