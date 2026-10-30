@@ -57,6 +57,8 @@ This app aims to act as a "personal tutor," helping children review their lesson
 
 ### 🔧 Build & Test
 
+Contributors and AI agents: start with [AGENTS.md](AGENTS.md), then [ADRs](docs/adr/README.md) and [feature specs](docs/spec/README.md).
+
 ```bash
 bash gradlew testDebugUnitTest assembleDebug
 ```
@@ -115,6 +117,8 @@ LittleTutor 是一款專為小學生設計的整合式 Android 學習夥伴，�
 *   **異步處理：** Kotlin Coroutines & Flow。
 
 ### 🔧 建置與測試
+
+開發者與 AI 助手請先閱讀 [AGENTS.md](AGENTS.md)，再看 [架構決策 ADR](docs/adr/README.md) 與 [功能規格](docs/spec/README.md)。
 
 ```bash
 bash gradlew testDebugUnitTest assembleDebug
