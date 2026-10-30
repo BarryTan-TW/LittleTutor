@@ -566,7 +566,11 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
         val statistics = wordStats.map { (word, counts) ->
             WordStatistics(word, counts.first, counts.second)
-        }.sortedByDescending { it.getErrorRate() }
+        }.sortedWith(
+            compareByDescending<WordStatistics> { it.getErrorRate() }
+                .thenByDescending { it.totalAttempts - it.correctCount }
+                .thenBy { it.word }
+        )
 
         _uiState.update {
             it.copy(

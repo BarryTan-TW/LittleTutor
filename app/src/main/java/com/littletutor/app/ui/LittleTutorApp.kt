@@ -192,6 +192,7 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
 
         if (uiState.isScoreHistoryOpen) {
             ScoreHistoryDialog(
+                unitTitle = uiState.scoreHistoryUnitId?.let { id -> uiState.testUnits.firstOrNull { it.id == id }?.title },
                 testRecords = uiState.testRecords,
                 wordStatistics = uiState.wordStatistics,
                 onClearHistory = viewModel::clearScoreHistory,
