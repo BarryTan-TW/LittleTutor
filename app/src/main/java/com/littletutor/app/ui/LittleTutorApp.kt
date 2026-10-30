@@ -33,7 +33,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -83,7 +82,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.littletutor.app.ui.tutor.Question
 import com.littletutor.app.ui.tutor.TestUnit
 import com.littletutor.app.ui.tutor.TestingMode
 import com.littletutor.app.ui.tutor.TutorViewModel
@@ -197,24 +195,6 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
                 onFinishTest = viewModel::finishWritingTest,
                 onUpdateSpeechRate = viewModel::updateWritingSpeechRate
             )
-        } else if (uiState.isLessonActive) {
-            if (uiState.tutorState.isFinished) {
-                ResultScreen(
-                    score = uiState.tutorState.score,
-                    totalQuestions = uiState.tutorState.totalQuestions,
-                    innerPadding = innerPadding,
-                    onRestart = viewModel::restart,
-                    onBackHome = viewModel::goHome
-                )
-            } else {
-                QuizScreen(
-                    uiState = uiState.tutorState,
-                    innerPadding = innerPadding,
-                    onSelectOption = viewModel::selectOption,
-                    onCheckAnswer = viewModel::checkAnswer,
-                    onNextQuestion = viewModel::nextQuestion
-                )
-            }
         } else {
             HomeScreen(
                 viewModel = viewModel,
@@ -1457,71 +1437,6 @@ private fun isPointInPolygon(point: Offset, polygon: List<Offset>): Boolean {
         j = i
     }
     return inside
-}
-
-@Composable
-private fun QuizScreen(
-    uiState: com.littletutor.app.ui.tutor.TutorUiState,
-    innerPadding: PaddingValues,
-    onSelectOption: (Int) -> Unit,
-    onCheckAnswer: () -> Unit,
-    onNextQuestion: () -> Unit
-) {
-    val currentQuestion = uiState.currentQuestion ?: return
-    Column(
-        modifier = Modifier.fillMaxSize().padding(innerPadding).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Text(text = "題目 ${uiState.currentQuestionNumber}/${uiState.totalQuestions}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        if (uiState.isAnswerChecked) {
-            ZhuyinText(text = currentQuestion.prompt, fontSize = MaterialTheme.typography.titleLarge.fontSize)
-        } else {
-            Text(text = currentQuestion.prompt, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        }
-        OptionList(question = currentQuestion, selectedOptionIndex = uiState.selectedOptionIndex, isAnswerChecked = uiState.isAnswerChecked, onSelectOption = onSelectOption)
-        Button(onClick = { if (uiState.isAnswerChecked) onNextQuestion() else onCheckAnswer() }, enabled = uiState.selectedOptionIndex != null, modifier = Modifier.fillMaxWidth()) {
-            Text(text = if (uiState.isAnswerChecked) "下一題" else "確認")
-        }
-        Text(text = "分數：${uiState.score}", style = MaterialTheme.typography.bodyLarge)
-        if (uiState.isAnswerChecked) {
-            Text(text = if (uiState.isCurrentAnswerCorrect) "太棒了，答對了！" else "還差一點，再試一次！", style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-@Composable
-private fun OptionList(question: Question, selectedOptionIndex: Int?, isAnswerChecked: Boolean, onSelectOption: (Int) -> Unit) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        itemsIndexed(question.options) { index, optionText ->
-            val isSelected = selectedOptionIndex == index
-            val isCorrect = index == question.correctOptionIndex
-            val cardColor = when {
-                isAnswerChecked && isCorrect -> MaterialTheme.colorScheme.tertiaryContainer
-                isAnswerChecked && isSelected && !isCorrect -> MaterialTheme.colorScheme.errorContainer
-                isSelected -> MaterialTheme.colorScheme.primaryContainer
-                else -> MaterialTheme.colorScheme.surfaceVariant
-            }
-            Card(onClick = { if (!isAnswerChecked) onSelectOption(index) }, modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
-                Box(modifier = Modifier.padding(16.dp)) {
-                    if (isAnswerChecked) {
-                        ZhuyinText(text = optionText, fontSize = MaterialTheme.typography.bodyLarge.fontSize)
-                    } else {
-                        Text(text = optionText, style = MaterialTheme.typography.bodyLarge)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ResultScreen(score: Int, totalQuestions: Int, innerPadding: PaddingValues, onRestart: () -> Unit, onBackHome: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize().padding(innerPadding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Text(text = "本次課程完成！", style = MaterialTheme.typography.headlineMedium)
-        Text(text = "你的分數：$score / $totalQuestions", style = MaterialTheme.typography.titleLarge)
-        Button(onClick = onRestart, modifier = Modifier.fillMaxWidth()) { Text(text = "重新開始") }
-        Button(onClick = onBackHome, modifier = Modifier.fillMaxWidth()) { Text(text = "回到首頁") }
-    }
 }
 
 @Composable

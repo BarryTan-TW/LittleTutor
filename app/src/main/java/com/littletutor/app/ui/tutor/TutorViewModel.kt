@@ -91,14 +91,11 @@ data class LittleTutorUiState(
     val testRecords: List<TestRecord> = emptyList(),
     val wordStatistics: List<WordStatistics> = emptyList(),
     val isScoreHistoryOpen: Boolean = false,
-    val scoreHistoryUnitId: String? = null,
-    val tutorState: TutorUiState = TutorUiState(),
-    val isLessonActive: Boolean = false
+    val scoreHistoryUnitId: String? = null
 )
 
 class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private val userSpaceManager = UserSpaceManager.withAppFilesDir(application.filesDir)
-    private val enginesByUserId = mutableMapOf<String, TutorEngine>()
 
     private val _uiState = MutableStateFlow(LittleTutorUiState())
     val uiState: StateFlow<LittleTutorUiState> = _uiState.asStateFlow()
@@ -137,17 +134,17 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
         userSpaceManager.addUser(name)
         _uiState.update { it.copy(newUserNameInput = "") }
-        reloadFromStorage(preserveLessonState = true)
+        reloadFromStorage()
     }
 
     fun switchUser(userId: String) {
         userSpaceManager.switchUser(userId)
-        reloadFromStorage(preserveLessonState = false)
+        reloadFromStorage()
     }
 
     fun deleteUser(userId: String) {
         userSpaceManager.deleteUser(userId)
-        reloadFromStorage(preserveLessonState = false)
+        reloadFromStorage()
     }
 
     fun preparePhotoCaptureUri(): Uri? {
@@ -191,7 +188,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         userSpaceManager.deletePhotos(currentUser.id, selectedPhotos)
-        reloadFromStorage(preserveLessonState = true)
+        reloadFromStorage()
     }
 
     fun openPhotoPreview(photoPath: String) {
@@ -278,7 +275,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             words = selectedWords,
             photoPaths = listOf(photoPath)
         )
-        reloadFromStorage(preserveLessonState = true)
+        reloadFromStorage()
         closePhotoPreview()
     }
 
@@ -301,7 +298,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         val index = units.indexOfFirst { it.id == selectedId }
         if (index > 0) {
             userSpaceManager.moveTestUnit(currentUser.id, index, index - 1)
-            reloadFromStorage(preserveLessonState = true)
+            reloadFromStorage()
             // 保持選取
             _uiState.update { it.copy(selectedTestUnitIds = setOf(selectedId)) }
         }
@@ -314,7 +311,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         val index = units.indexOfFirst { it.id == selectedId }
         if (index >= 0 && index < units.size - 1) {
             userSpaceManager.moveTestUnit(currentUser.id, index, index + 1)
-            reloadFromStorage(preserveLessonState = true)
+            reloadFromStorage()
             // 保持選取
             _uiState.update { it.copy(selectedTestUnitIds = setOf(selectedId)) }
         }
@@ -349,8 +346,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 isWritingAnswerCorrect = null,
                 isWritingRoundFinished = false,
                 isWritingTestSaved = false,
-                writingCorrectCount = 0,
-                isLessonActive = false
+                writingCorrectCount = 0
             )
         }
 
@@ -659,7 +655,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             words = parsedWords,
             photoPaths = emptyList()
         )
-        reloadFromStorage(preserveLessonState = true)
+        reloadFromStorage()
         closeAddUnitDialog()
     }
 
@@ -700,7 +696,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
 
-        reloadFromStorage(preserveLessonState = true)
+        reloadFromStorage()
         closeEditUnitDialog()
     }
 
@@ -712,47 +708,13 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         userSpaceManager.deleteTestUnits(currentUser.id, selectedIds)
-        reloadFromStorage(preserveLessonState = true)
+        reloadFromStorage()
     }
 
 
-    fun startLesson() {
-        val currentUser = _uiState.value.currentUser ?: return
-        val currentEngine = engineFor(currentUser.id)
-        _uiState.update {
-            it.copy(
-                isLessonActive = true,
-                tutorState = currentEngine.state()
-            )
-        }
-    }
-
-    fun goHome() {
-        _uiState.update { it.copy(isLessonActive = false) }
-    }
-
-    fun selectOption(index: Int) {
-        mutateTutorState { selectOption(index) }
-    }
-
-    fun checkAnswer() {
-        mutateTutorState { checkAnswer() }
-    }
-
-    fun nextQuestion() {
-        mutateTutorState { nextQuestion() }
-    }
-
-    fun restart() {
-        mutateTutorState { restart() }
-    }
-
-    private fun reloadFromStorage(
-        preserveLessonState: Boolean = false
-    ) {
+    private fun reloadFromStorage() {
         val users = userSpaceManager.listUsers()
         val currentUser = userSpaceManager.currentUser()
-        val currentEngine = engineFor(currentUser.id)
         _uiState.update {
             it.copy(
                 users = users,
@@ -760,22 +722,9 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 photoPaths = userSpaceManager.listPhotos(currentUser.id).map(File::getAbsolutePath),
                 selectedPhotoPaths = emptySet(),
                 testUnits = userSpaceManager.loadTestUnits(currentUser.id),
-                selectedTestUnitIds = emptySet(),
-                tutorState = currentEngine.state(),
-                isLessonActive = if (preserveLessonState) it.isLessonActive else false
+                selectedTestUnitIds = emptySet()
             )
         }
-    }
-
-    private fun mutateTutorState(action: TutorEngine.() -> Unit) {
-        val currentUser = _uiState.value.currentUser ?: return
-        val currentEngine = engineFor(currentUser.id)
-        currentEngine.action()
-        _uiState.update { it.copy(tutorState = currentEngine.state()) }
-    }
-
-    private fun engineFor(userId: String): TutorEngine {
-        return enginesByUserId.getOrPut(userId) { TutorEngine() }
     }
 
     fun getZhuyin(char: Char): String {
