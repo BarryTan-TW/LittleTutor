@@ -62,7 +62,7 @@ data class LittleTutorUiState(
     val photoPaths: List<String> = emptyList(),
     val selectedPhotoPaths: Set<String> = emptySet(),
     val testUnits: List<TestUnit> = emptyList(),
-    val selectedTestUnitIds: Set<String> = emptySet(),
+    val latestAccuracyByUnitTitle: Map<String, Float> = emptyMap(),
     val isAddUnitDialogOpen: Boolean = false,
     val isAddUnitPhotoAreaOpen: Boolean = false,
     val addingUnitTitleInput: String = "",
@@ -78,6 +78,8 @@ data class LittleTutorUiState(
     val isPreviewTokenLoading: Boolean = false,
     val previewUnitTitleInput: String = "課文單詞句",
     val isWritingTestActive: Boolean = false,
+    val writingUnitId: String? = null,
+    val writingUnitTitle: String = "",
     val writingWordsRound: List<String> = emptyList(),
     val writingCurrentIndex: Int = 0,
     val writingShowAnswer: Boolean = false,
@@ -288,52 +290,19 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         closePhotoPreview()
     }
 
-    fun toggleTestUnitSelection(unitId: String) {
-        _uiState.update {
-            // 改為單選邏輯：點擊已選中的則取消，點擊未選中的則切換選中該項
-            val next = if (it.selectedTestUnitIds.contains(unitId)) {
-                emptySet()
-            } else {
-                setOf(unitId)
-            }
-            it.copy(selectedTestUnitIds = next)
-        }
-    }
-
-    fun moveTestUnitUp() {
+    fun moveTestUnit(unitId: String, up: Boolean) {
         val currentUser = _uiState.value.currentUser ?: return
-        val selectedId = _uiState.value.selectedTestUnitIds.firstOrNull() ?: return
-        val units = _uiState.value.testUnits
-        val index = units.indexOfFirst { it.id == selectedId }
-        if (index > 0) {
-            userSpaceManager.moveTestUnit(currentUser.id, index, index - 1)
+        val index = _uiState.value.testUnits.indexOfFirst { it.id == unitId }
+        if (index < 0) return
+        val target = if (up) index - 1 else index + 1
+        if (userSpaceManager.moveTestUnit(currentUser.id, index, target)) {
             reloadFromStorage()
-            // 保持選取
-            _uiState.update { it.copy(selectedTestUnitIds = setOf(selectedId)) }
         }
     }
 
-    fun moveTestUnitDown() {
-        val currentUser = _uiState.value.currentUser ?: return
-        val selectedId = _uiState.value.selectedTestUnitIds.firstOrNull() ?: return
-        val units = _uiState.value.testUnits
-        val index = units.indexOfFirst { it.id == selectedId }
-        if (index >= 0 && index < units.size - 1) {
-            userSpaceManager.moveTestUnit(currentUser.id, index, index + 1)
-            reloadFromStorage()
-            // 保持選取
-            _uiState.update { it.copy(selectedTestUnitIds = setOf(selectedId)) }
-        }
-    }
-
-    fun startSelectedUnitsTest() {
-        val selectedUnits = _uiState.value.testUnits.filter { _uiState.value.selectedTestUnitIds.contains(it.id) }
-        if (selectedUnits.isEmpty()) {
-            return
-        }
-
-        val words = selectedUnits
-            .flatMap { it.words }
+    fun startUnitTest(unitId: String) {
+        val unit = _uiState.value.testUnits.firstOrNull { it.id == unitId } ?: return
+        val words = unit.words
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()
@@ -348,6 +317,8 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update {
             it.copy(
                 isWritingTestActive = true,
+                writingUnitId = unit.id,
+                writingUnitTitle = unit.title,
                 writingWordsRound = words,
                 writingCurrentIndex = 0,
                 writingShowAnswer = false,
@@ -500,14 +471,6 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         writingResultsByIndex.clear()
     }
 
-    private fun getSelectedUnitsTitle(): String {
-        val selectedIds = _uiState.value.selectedTestUnitIds
-        val titles = _uiState.value.testUnits
-            .filter { selectedIds.contains(it.id) }
-            .map { it.title }
-        return titles.joinToString(", ")
-    }
-
     fun saveTestRecord() {
         var shouldProceed = false
         _uiState.update { 
@@ -526,12 +489,13 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         // 僅儲存一筆完整的測試紀錄（包含所有選取的課文名稱）
         val combinedRecord = TestRecord(
             timestamp = timestamp,
-            unitTitle = getSelectedUnitsTitle(),
+            unitTitle = state.writingUnitTitle,
             totalCount = state.writingTestResults.size,
             correctCount = state.writingCorrectCount,
             results = state.writingTestResults
         )
         userSpaceManager.saveTestRecord(currentUser.id, combinedRecord)
+        _uiState.update { it.copy(latestAccuracyByUnitTitle = latestAccuracyByUnitTitle(currentUser.id)) }
 
         loadScoreHistory()
     }
@@ -589,16 +553,12 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         } else null
         
         userSpaceManager.clearTestRecords(currentUser.id, unitTitle)
+        _uiState.update { it.copy(latestAccuracyByUnitTitle = latestAccuracyByUnitTitle(currentUser.id)) }
         loadScoreHistory(unitId)
     }
 
-    fun openEditSelectedUnit() {
-        val selectedIds = _uiState.value.selectedTestUnitIds
-        if (selectedIds.size != 1) {
-            return
-        }
-
-        val target = _uiState.value.testUnits.firstOrNull { selectedIds.contains(it.id) } ?: return
+    fun openEditUnit(unitId: String) {
+        val target = _uiState.value.testUnits.firstOrNull { it.id == unitId } ?: return
         _uiState.update {
             it.copy(
                 isEditUnitDialogOpen = true,
@@ -709,17 +669,23 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         closeEditUnitDialog()
     }
 
-    fun deleteSelectedTestUnits() {
+    fun deleteTestUnit(unitId: String) {
         val currentUser = _uiState.value.currentUser ?: return
-        val selectedIds = _uiState.value.selectedTestUnitIds
-        if (selectedIds.isEmpty()) {
-            return
-        }
-
-        userSpaceManager.deleteTestUnits(currentUser.id, selectedIds)
+        userSpaceManager.deleteTestUnits(currentUser.id, setOf(unitId))
         reloadFromStorage()
     }
 
+
+    private fun latestAccuracyByUnitTitle(userId: String): Map<String, Float> {
+        val latest = mutableMapOf<String, TestRecord>()
+        userSpaceManager.loadTestRecords(userId).forEach { record ->
+            UserSpaceManager.splitRecordTitles(record.unitTitle).forEach { title ->
+                val previous = latest[title]
+                if (previous == null || record.timestamp >= previous.timestamp) latest[title] = record
+            }
+        }
+        return latest.mapValues { it.value.getAccuracy() }
+    }
 
     private fun reloadFromStorage() {
         val users = userSpaceManager.listUsers()
@@ -731,7 +697,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 photoPaths = userSpaceManager.listPhotos(currentUser.id).map(File::getAbsolutePath),
                 selectedPhotoPaths = emptySet(),
                 testUnits = userSpaceManager.loadTestUnits(currentUser.id),
-                selectedTestUnitIds = emptySet()
+                latestAccuracyByUnitTitle = latestAccuracyByUnitTitle(currentUser.id)
             )
         }
     }

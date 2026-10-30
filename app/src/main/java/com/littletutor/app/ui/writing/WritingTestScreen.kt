@@ -226,7 +226,7 @@ internal fun WritingTestScreen(
                 Button(
                     onClick = {
                         viewModel.saveTestRecord()
-                        val selectedUnitId = uiState.selectedTestUnitIds.firstOrNull()
+                        val selectedUnitId = uiState.writingUnitId
                         viewModel.openScoreHistory(selectedUnitId)
                     },
                     modifier = Modifier.weight(1f)

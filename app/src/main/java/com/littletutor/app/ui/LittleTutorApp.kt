@@ -46,7 +46,7 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) {
         viewModel.onPhotoCaptured(it)
     }
-    var showDeleteUnitConfirm by rememberSaveable { mutableStateOf(false) }
+    var pendingDeleteUnitId by rememberSaveable { mutableStateOf<String?>(null) }
     var showExitTestConfirm by rememberSaveable { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -104,16 +104,15 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
             )
         } else {
             HomeScreen(
-                viewModel = viewModel,
-                uiState = uiState,
+                testUnits = uiState.testUnits,
+                latestAccuracyByUnitTitle = uiState.latestAccuracyByUnitTitle,
                 innerPadding = innerPadding,
-                onToggleTestUnitSelection = viewModel::toggleTestUnitSelection,
-                onMoveUp = viewModel::moveTestUnitUp,
-                onMoveDown = viewModel::moveTestUnitDown,
                 onAddUnit = viewModel::openAddUnitDialog,
-                onEditSelectedUnit = viewModel::openEditSelectedUnit,
-                onDeleteSelectedUnits = { showDeleteUnitConfirm = true },
-                onStartSelectedUnitsTest = viewModel::startSelectedUnitsTest
+                onStartTest = viewModel::startUnitTest,
+                onOpenHistory = viewModel::openScoreHistory,
+                onEditUnit = viewModel::openEditUnit,
+                onMoveUnit = viewModel::moveTestUnit,
+                onDeleteUnit = { pendingDeleteUnitId = it }
             )
         }
 
@@ -197,13 +196,14 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
             )
         }
 
-        if (showDeleteUnitConfirm) {
+        pendingDeleteUnitId?.let { unitId ->
+            val unitTitle = uiState.testUnits.firstOrNull { it.id == unitId }?.title.orEmpty()
             ConfirmDialog(
-                title = "確認刪除",
-                message = "確定要刪除選取的課文單元及其測試紀錄嗎？這項動作無法復原。",
+                title = "刪除「$unitTitle」？",
+                message = "課文單元及其測試紀錄都會被刪除，這項動作無法復原。",
                 confirmText = "確定刪除",
-                onConfirm = viewModel::deleteSelectedTestUnits,
-                onDismiss = { showDeleteUnitConfirm = false }
+                onConfirm = { viewModel.deleteTestUnit(unitId) },
+                onDismiss = { pendingDeleteUnitId = null }
             )
         }
 
