@@ -121,9 +121,16 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private val writingResultsByIndex = mutableMapOf<Int, Boolean>()
     private var ocrJob: Job? = null
     private var writingEvalJob: Job? = null
+    private val settingsPrefs = application.getSharedPreferences(SETTINGS_PREFS, android.content.Context.MODE_PRIVATE)
     private var writingAdvanceJob: Job? = null
 
     init {
+        val savedMode = settingsPrefs.getString(KEY_TESTING_MODE, null)
+            ?.let { name -> TestingMode.entries.firstOrNull { it.name == name } }
+        val savedRate = settingsPrefs.getFloat(KEY_SPEECH_RATE, 1.0f).coerceIn(0.5f, 2.0f)
+        _uiState.update {
+            it.copy(testingMode = savedMode ?: it.testingMode, writingSpeechRate = savedRate)
+        }
         reloadFromStorage()
         ensureTextToSpeech()
     }
@@ -146,6 +153,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTestingMode(mode: TestingMode) {
         _uiState.update { it.copy(testingMode = mode) }
+        settingsPrefs.edit().putString(KEY_TESTING_MODE, mode.name).apply()
     }
 
     fun updateNewUserName(input: String) {
@@ -154,21 +162,23 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addUser() {
         val name = _uiState.value.newUserNameInput.trim()
-        if (name.isEmpty()) {
-            return
-        }
+        if (name.isEmpty() || isDuplicateUserName(name, _uiState.value.users)) return
 
-        userSpaceManager.addUser(name)
+        // A newly added child is almost always the one about to use the app, so switch to them.
+        val user = userSpaceManager.addUser(name)
+        userSpaceManager.switchUser(user.id)
         _uiState.update { it.copy(newUserNameInput = "") }
         reloadFromStorage()
     }
 
     fun switchUser(userId: String) {
+        if (_uiState.value.currentUser?.id == userId) return
         userSpaceManager.switchUser(userId)
         reloadFromStorage()
     }
 
     fun deleteUser(userId: String) {
+        if (_uiState.value.users.size <= 1) return
         userSpaceManager.deleteUser(userId)
         reloadFromStorage()
     }
@@ -391,8 +401,10 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun updateWritingSpeechRate(rate: Float) {
-        _uiState.update { it.copy(writingSpeechRate = rate.coerceIn(0.5f, 2.0f)) }
-        textToSpeech?.setSpeechRate(rate.coerceIn(0.5f, 2.0f))
+        val safeRate = rate.coerceIn(0.5f, 2.0f)
+        _uiState.update { it.copy(writingSpeechRate = safeRate) }
+        textToSpeech?.setSpeechRate(safeRate)
+        settingsPrefs.edit().putFloat(KEY_SPEECH_RATE, safeRate).apply()
     }
 
     fun toggleWritingAnswerVisibility() {
@@ -1022,5 +1034,14 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         textToSpeech?.shutdown()
         textRecognizer.close()
         super.onCleared()
+    }
+
+    companion object {
+        private const val SETTINGS_PREFS = "little_tutor_settings"
+        private const val KEY_TESTING_MODE = "testing_mode"
+        private const val KEY_SPEECH_RATE = "speech_rate"
+
+        fun isDuplicateUserName(name: String, users: List<UserSpace>): Boolean =
+            users.any { it.displayName.trim().equals(name.trim(), ignoreCase = true) }
     }
 }
