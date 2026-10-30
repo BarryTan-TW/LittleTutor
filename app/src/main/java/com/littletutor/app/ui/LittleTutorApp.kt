@@ -137,18 +137,16 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
                 photoPath = previewPhotoPath,
                 previewTokens = uiState.previewTokens,
                 selectedTokenIndexes = uiState.selectedPreviewTokenIndexes,
+                imageWidth = uiState.previewImageWidth,
+                imageHeight = uiState.previewImageHeight,
                 isLoading = uiState.isPreviewTokenLoading,
                 unitTitle = uiState.previewUnitTitleInput,
-                existingUnitTitles = uiState.testUnits.map { it.title }.distinct().sorted(),
+                existingUnitTitles = uiState.testUnits.map { it.title },
                 onToggleToken = viewModel::togglePreviewToken,
-                onSetTokenSelected = viewModel::setPreviewTokenSelected,
                 onApplySelectedSet = viewModel::setPreviewSelectedTokenIndexes,
                 onUnitTitleChange = viewModel::updatePreviewUnitTitleInput,
                 onSave = viewModel::savePreviewSelectionToUnit,
-                onDismiss = {
-                    viewModel.closePhotoPreview()
-                    viewModel.closeAddUnitDialog()
-                }
+                onDismiss = viewModel::closePhotoPreview
             )
         }
 

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,6 +23,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -152,7 +161,13 @@ fun ConfirmDialog(
     )
 }
 
-/** Full-screen dialog with a top app bar; system bars and IME insets are handled by the Scaffold. */
+/**
+ * Full-screen dialog with a top app bar.
+ *
+ * On Android 15+ dialog windows are forced edge-to-edge, but Compose 1.6 does not deliver window insets inside
+ * dialogs. The activity's navigation-bar inset is therefore read outside the dialog and applied as bottom padding
+ * only for the part of the dialog that actually overlaps the navigation bar.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FullScreenDialog(
@@ -163,10 +178,16 @@ fun FullScreenDialog(
     actions: @Composable () -> Unit = {},
     content: @Composable (Modifier) -> Unit
 ) {
+    val hostRootView = LocalView.current.rootView
+    val navBarBottomPx = WindowInsets.navigationBars.getBottom(LocalDensity.current)
+
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
+        val dialogView = LocalView.current
+        val density = LocalDensity.current
+        var navBarOverlapPx by remember { mutableIntStateOf(0) }
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -183,9 +204,20 @@ fun FullScreenDialog(
                     actions = { actions() }
                 )
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned {
+                    val dialogLocation = IntArray(2).also(dialogView::getLocationOnScreen)
+                    val hostLocation = IntArray(2).also(hostRootView::getLocationOnScreen)
+                    val navBarTop = hostLocation[1] + hostRootView.height - navBarBottomPx
+                    navBarOverlapPx = (dialogLocation[1] + dialogView.height - navBarTop).coerceIn(0, navBarBottomPx)
+                }
         ) { innerPadding ->
-            content(Modifier.padding(innerPadding))
+            content(
+                Modifier
+                    .padding(innerPadding)
+                    .padding(bottom = with(density) { navBarOverlapPx.toDp() })
+            )
         }
     }
 }

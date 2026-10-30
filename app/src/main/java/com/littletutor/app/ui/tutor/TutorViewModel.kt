@@ -15,7 +15,10 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 import kotlin.random.Random
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -76,7 +79,9 @@ data class LittleTutorUiState(
     val previewTokens: List<OcrToken> = emptyList(),
     val selectedPreviewTokenIndexes: Set<Int> = emptySet(),
     val isPreviewTokenLoading: Boolean = false,
-    val previewUnitTitleInput: String = "課文單詞句",
+    val previewImageWidth: Int = 0,
+    val previewImageHeight: Int = 0,
+    val previewUnitTitleInput: String = "",
     val isWritingTestActive: Boolean = false,
     val writingUnitId: String? = null,
     val writingUnitTitle: String = "",
@@ -107,6 +112,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private var textToSpeech: TextToSpeech? = null
     private var ttsReady = false
     private val writingResultsByIndex = mutableMapOf<Int, Boolean>()
+    private var ocrJob: Job? = null
 
     init {
         reloadFromStorage()
@@ -169,7 +175,8 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     fun onPhotoCaptured(success: Boolean) {
         val currentUser = _uiState.value.currentUser ?: return
         val pendingFile = pendingCaptureFile
-        if (!success) {
+        val captured = success && pendingFile != null && pendingFile.length() > 0
+        if (!captured) {
             pendingFile?.delete()
         }
         pendingCaptureFile = null
@@ -178,6 +185,9 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 photoPaths = userSpaceManager.listPhotos(currentUser.id).map(File::getAbsolutePath),
                 selectedPhotoPaths = emptySet()
             )
+        }
+        if (captured) {
+            openPhotoPreview(pendingFile!!.absolutePath)
         }
     }
 
@@ -208,17 +218,23 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 isPhotoPreviewOpen = true,
                 previewPhotoPath = photoPath,
                 previewTokens = emptyList(),
+                previewImageWidth = 0,
+                previewImageHeight = 0,
                 selectedPreviewTokenIndexes = emptySet(),
                 isPreviewTokenLoading = true,
-                previewUnitTitleInput = "課文單詞句"
+                previewUnitTitleInput = it.addingUnitTitleInput.trim()
             )
         }
 
-        viewModelScope.launch {
-            val tokens = extractTokensFromPhoto(photoPath)
+        ocrJob?.cancel()
+        ocrJob = viewModelScope.launch {
+            val result = extractTokensFromPhoto(photoPath)
             _uiState.update {
+                if (it.previewPhotoPath != photoPath) return@update it
                 it.copy(
-                    previewTokens = tokens,
+                    previewTokens = result.tokens,
+                    previewImageWidth = result.width,
+                    previewImageHeight = result.height,
                     selectedPreviewTokenIndexes = emptySet(),
                     isPreviewTokenLoading = false
                 )
@@ -227,6 +243,8 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun closePhotoPreview() {
+        ocrJob?.cancel()
+        ocrJob = null
         _uiState.update {
             it.copy(
                 isPhotoPreviewOpen = false,
@@ -248,18 +266,6 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setPreviewTokenSelected(index: Int, selected: Boolean) {
-        _uiState.update {
-            val next = it.selectedPreviewTokenIndexes.toMutableSet()
-            if (selected) {
-                next.add(index)
-            } else {
-                next.remove(index)
-            }
-            it.copy(selectedPreviewTokenIndexes = next)
-        }
-    }
-
     fun setPreviewSelectedTokenIndexes(indexes: Set<Int>) {
         _uiState.update { it.copy(selectedPreviewTokenIndexes = indexes) }
     }
@@ -269,25 +275,32 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun savePreviewSelectionToUnit() {
-        val currentUser = _uiState.value.currentUser ?: return
-        val photoPath = _uiState.value.previewPhotoPath ?: return
-        val selectedWords = _uiState.value.previewTokens
-            .filterIndexed { index, _ -> _uiState.value.selectedPreviewTokenIndexes.contains(index) }
-            .map { it.text }
-            .filter { it.isNotBlank() }
+        val state = _uiState.value
+        val currentUser = state.currentUser ?: return
+        val photoPath = state.previewPhotoPath ?: return
+        val title = state.previewUnitTitleInput.trim()
+        val selectedWords = state.previewTokens
+            .filterIndexed { index, _ -> state.selectedPreviewTokenIndexes.contains(index) }
+            .map { it.text.trim() }
+            .filter { it.isNotEmpty() }
             .distinct()
-        if (_uiState.value.previewUnitTitleInput.isBlank() || selectedWords.isEmpty()) {
+        if (title.isEmpty() || selectedWords.isEmpty()) {
             return
         }
+        // Words typed manually in the add form are kept rather than silently discarded.
+        val typedWords = if (state.isAddUnitDialogOpen) UnitInput.parseWords(state.addingUnitWordsInput) else emptyList()
+        val isExisting = state.testUnits.any { it.title.trim() == title }
 
         userSpaceManager.appendToTestUnitByTitle(
             userId = currentUser.id,
-            title = _uiState.value.previewUnitTitleInput,
-            words = selectedWords,
+            title = title,
+            words = (typedWords + selectedWords).distinct(),
             photoPaths = listOf(photoPath)
         )
         reloadFromStorage()
         closePhotoPreview()
+        closeAddUnitDialog()
+        showMessage(if (isExisting) "已加入 ${selectedWords.size} 個字詞到「$title」" else "已新增「$title」")
     }
 
     fun moveTestUnit(unitId: String, up: Boolean) {
@@ -709,31 +722,35 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         return ZhuyinHelper.getZhuyin(char)
     }
 
-    private suspend fun extractTokensFromPhoto(photoPath: String): List<OcrToken> {
-        val image = runCatching {
-            InputImage.fromFilePath(getApplication(), Uri.fromFile(File(photoPath)))
-        }.getOrNull() ?: return emptyList()
+    private class OcrResult(val tokens: List<OcrToken>, val width: Int, val height: Int)
 
-        return runCatching {
-            textRecognizer.process(image).await()
+    /** Token boxes are in the coordinate space of the upright, downsampled bitmap (width x height). */
+    private suspend fun extractTokensFromPhoto(photoPath: String): OcrResult {
+        val bitmap = withContext(Dispatchers.IO) {
+            PhotoBitmaps.decodeUpright(photoPath, PhotoBitmaps.OCR_MAX_DIMENSION)
+        } ?: return OcrResult(emptyList(), 0, 0)
+        val width = bitmap.width
+        val height = bitmap.height
+
+        val tokens = runCatching {
+            textRecognizer.process(InputImage.fromBitmap(bitmap, 0)).await()
                 .textBlocks
                 .flatMap { block -> block.lines }
                 .flatMap { line -> line.elements }
-                .mapNotNull { element ->
-                    val box = element.boundingBox ?: return@mapNotNull null
+                .flatMap { element ->
+                    val box = element.boundingBox ?: return@flatMap emptyList()
                     val text = element.text.trim()
-                    if (text.isEmpty()) {
-                        return@mapNotNull null
+                    if (text.isEmpty()) return@flatMap emptyList()
+                    val symbols = element.symbols.mapNotNull { symbol ->
+                        val symbolBox = symbol.boundingBox ?: return@mapNotNull null
+                        if (symbol.text.isBlank()) return@mapNotNull null
+                        OcrToken(symbol.text, symbolBox.left, symbolBox.top, symbolBox.right, symbolBox.bottom)
                     }
-                    OcrToken(
-                        text = text,
-                        left = box.left,
-                        top = box.top,
-                        right = box.right,
-                        bottom = box.bottom
-                    )
+                    OcrTokenSplitter.split(OcrToken(text, box.left, box.top, box.right, box.bottom), symbols)
                 }
         }.getOrDefault(emptyList())
+        bitmap.recycle()
+        return OcrResult(tokens, width, height)
     }
 
     private suspend fun recognizeTextFromBitmap(bitmap: Bitmap): String {
