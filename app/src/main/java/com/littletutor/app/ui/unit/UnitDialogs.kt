@@ -1,101 +1,56 @@
 package com.littletutor.app.ui.unit
 
-import android.graphics.BitmapFactory
-import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
-import android.graphics.Paint
-import android.graphics.Path as AndroidPath
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.littletutor.app.ui.tutor.TestUnit
-import com.littletutor.app.ui.tutor.TestingMode
-import com.littletutor.app.ui.tutor.TutorViewModel
-import com.littletutor.app.ui.tutor.UserSpace
-import com.littletutor.app.ui.tutor.ZhuyinHelper
-import com.littletutor.app.ui.common.ZhuyinText
-import com.littletutor.app.ui.common.simpleVerticalScrollbar
+import com.littletutor.app.ui.common.ConfirmDialog
+import com.littletutor.app.ui.common.FullScreenDialog
 import com.littletutor.app.ui.photo.PhotoThumbnail
+import com.littletutor.app.ui.tutor.UnitInput
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AddTestUnitDialog(
     title: String,
     words: String,
+    otherTitles: List<String>,
     isPhotoAreaOpen: Boolean,
     photoPaths: List<String>,
     selectedPhotoPaths: Set<String>,
@@ -110,230 +65,227 @@ internal fun AddTestUnitDialog(
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = if (isPhotoAreaOpen) "題庫建立區域" else "新增測試項目")
-                            if (!isPhotoAreaOpen) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = onOpenPhotoArea,
-                                    modifier = Modifier.height(36.dp)
-                                ) {
-                                    Text(text = "從照片建立")
-                                }
-                            }
-                        }
-                    },
-                    navigationIcon = {
-                        if (isPhotoAreaOpen) {
-                            TextButton(onClick = onClosePhotoArea) {
-                                Text(text = "返回")
-                            }
-                        }
-                    },
-                    actions = {
-                        if (!isPhotoAreaOpen) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = onSave,
-                                    enabled = title.isNotBlank() && words.isNotBlank()
-                                ) {
-                                    Text(text = "儲存")
-                                }
-                                TextButton(onClick = onDismiss) {
-                                    Text(text = "取消")
-                                }
-                            }
-                        }
-                    }
-                )
-            },
-            modifier = Modifier.fillMaxSize()
-        ) { innerPadding ->
-            if (isPhotoAreaOpen) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Card(
-                        modifier = Modifier.fillMaxSize(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxSize(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxSize(),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Button(onClick = onTakePhoto) {
-                                        Text(text = "拍照")
-                                    }
-                                    Button(
-                                        onClick = onDeleteSelectedPhotos,
-                                        enabled = selectedPhotoPaths.isNotEmpty()
-                                    ) {
-                                        Text(text = "刪除照片")
-                                    }
-                                }
-
-                                Card(
-                                    modifier = Modifier
-                                        .weight(3f)
-                                        .fillMaxSize(),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                                ) {
-                                    if (photoPaths.isEmpty()) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(16.dp),
-                                            verticalArrangement = Arrangement.Center,
-                                            horizontalAlignment = Alignment.CenterHorizontally
-                                        ) {
-                                            Text(text = "尚無照片")
-                                        }
-                                    } else {
-                                        LazyVerticalGrid(
-                                            columns = GridCells.Fixed(4),
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(8.dp),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            items(photoPaths.size) { index ->
-                                                val photoPath = photoPaths[index]
-                                                PhotoThumbnail(
-                                                    photoPath = photoPath,
-                                                    isSelected = selectedPhotoPaths.contains(photoPath),
-                                                    onPreview = { onOpenPhotoPreview(photoPath) },
-                                                    onToggleSelection = { onTogglePhotoSelection(photoPath) }
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            } else {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .imePadding()
-                        .padding(16.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = onTitleChange,
-                        label = { Text(text = "課文單元名稱") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    OutlinedTextField(
-                        value = words,
-                        onValueChange = onWordsChange,
-                        label = { Text(text = "字詞（可用 、 或換行分隔）") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 10
-                    )
-                }
-            }
+    if (isPhotoAreaOpen) {
+        FullScreenDialog(
+            title = "從課本照片建立",
+            onDismiss = onClosePhotoArea,
+            navigationIsBack = true
+        ) { modifier ->
+            PhotoLibrary(
+                modifier = modifier,
+                photoPaths = photoPaths,
+                selectedPhotoPaths = selectedPhotoPaths,
+                onTakePhoto = onTakePhoto,
+                onOpenPhotoPreview = onOpenPhotoPreview,
+                onTogglePhotoSelection = onTogglePhotoSelection,
+                onDeleteSelectedPhotos = onDeleteSelectedPhotos
+            )
         }
+        return
+    }
+
+    val canSave = UnitInput.titleError(title, otherTitles) == null && UnitInput.parseWords(words).isNotEmpty()
+    FullScreenDialog(
+        title = "新增課文",
+        onDismiss = onDismiss,
+        actions = { TextButton(onClick = onSave, enabled = canSave) { Text(text = "儲存") } }
+    ) { modifier ->
+        UnitForm(
+            modifier = modifier,
+            title = title,
+            words = words,
+            otherTitles = otherTitles,
+            onTitleChange = onTitleChange,
+            onWordsChange = onWordsChange,
+            header = {
+                Card(
+                    onClick = onOpenPhotoArea,
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(text = "📷", fontSize = 32.sp)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(text = "拍課本，直接圈選字詞", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Text(text = "自動辨識照片中的文字，點選或圈選即可加入課文", style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+                Text(text = "或手動輸入", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EditTestUnitDialog(
     title: String,
     words: String,
+    otherTitles: List<String>,
     onTitleChange: (String) -> Unit,
     onWordsChange: (String) -> Unit,
     onSave: () -> Unit,
     onDismiss: () -> Unit
 ) {
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
+    val canSave = UnitInput.titleError(title, otherTitles) == null && UnitInput.parseWords(words).isNotEmpty()
+    FullScreenDialog(
+        title = "編輯課文",
+        onDismiss = onDismiss,
+        actions = { TextButton(onClick = onSave, enabled = canSave) { Text(text = "儲存") } }
+    ) { modifier ->
+        UnitForm(
+            modifier = modifier,
+            title = title,
+            words = words,
+            otherTitles = otherTitles,
+            onTitleChange = onTitleChange,
+            onWordsChange = onWordsChange
         )
+    }
+}
+
+@Composable
+private fun UnitForm(
+    modifier: Modifier,
+    title: String,
+    words: String,
+    otherTitles: List<String>,
+    onTitleChange: (String) -> Unit,
+    onWordsChange: (String) -> Unit,
+    header: @Composable () -> Unit = {}
+) {
+    // Only flag the title once the user has typed something, so a fresh form isn't red.
+    val titleError = UnitInput.titleError(title, otherTitles).takeIf { title.isNotEmpty() }
+    val wordCount = UnitInput.parseWords(words).size
+
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .imePadding(),
+        contentAlignment = Alignment.TopCenter
     ) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text(text = "編輯內容") },
-                    navigationIcon = {
-                        TextButton(onClick = onDismiss) { Text(text = "取消") }
-                    },
-                    actions = {
-                        TextButton(
-                            onClick = onSave,
-                            enabled = title.isNotBlank() && words.isNotBlank()
-                        ) {
-                            Text(text = "儲存")
-                        }
-                    }
-                )
-            },
-            modifier = Modifier.fillMaxSize()
-        ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .widthIn(max = 720.dp)
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            header()
+            OutlinedTextField(
+                value = title,
+                onValueChange = onTitleChange,
+                label = { Text(text = "課文名稱") },
+                placeholder = { Text(text = "例如：第一課 春天來了") },
+                singleLine = true,
+                isError = titleError != null,
+                supportingText = titleError?.let { { Text(text = it) } },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = words,
+                onValueChange = onWordsChange,
+                label = { Text(text = "字詞") },
+                placeholder = { Text(text = "春天、花朵\n蝴蝶") },
+                supportingText = { Text(text = "用「、」「，」或換行分隔　目前 $wordCount 個字詞") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 200.dp),
+                minLines = 8
+            )
+        }
+    }
+}
+
+@Composable
+private fun PhotoLibrary(
+    modifier: Modifier,
+    photoPaths: List<String>,
+    selectedPhotoPaths: Set<String>,
+    onTakePhoto: () -> Unit,
+    onOpenPhotoPreview: (String) -> Unit,
+    onTogglePhotoSelection: (String) -> Unit,
+    onDeleteSelectedPhotos: () -> Unit
+) {
+    var confirmDelete by rememberSaveable { mutableStateOf(false) }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Button(onClick = onTakePhoto, modifier = Modifier.heightIn(min = 48.dp)) {
+                Icon(Icons.Filled.Add, contentDescription = null)
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(text = "拍照")
+            }
+            if (selectedPhotoPaths.isNotEmpty()) {
+                OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Icon(Icons.Filled.Delete, contentDescription = null)
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(text = "刪除 ${selectedPhotoPaths.size} 張")
+                }
+            }
+        }
+
+        if (photoPaths.isEmpty()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
-                    .imePadding()
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)
             ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = onTitleChange,
-                    label = { Text(text = "課文單元名稱") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = words,
-                    onValueChange = onWordsChange,
-                    label = { Text(text = "字詞（可用 、 或換行分隔）") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 10
+                Text(text = "📖", fontSize = 56.sp)
+                Text(
+                    text = "按「拍照」拍下課本頁面，\n拍完會自動開啟圈選畫面。",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center
                 )
             }
+        } else {
+            Text(
+                text = "點照片開始圈選字詞；勾選右上角可刪除照片",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 112.dp),
+                contentPadding = PaddingValues(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(photoPaths, key = { it }) { photoPath ->
+                    PhotoThumbnail(
+                        photoPath = photoPath,
+                        isSelected = selectedPhotoPaths.contains(photoPath),
+                        onPreview = { onOpenPhotoPreview(photoPath) },
+                        onToggleSelection = { onTogglePhotoSelection(photoPath) }
+                    )
+                }
+            }
         }
+    }
+
+    if (confirmDelete) {
+        ConfirmDialog(
+            title = "刪除照片？",
+            message = "將刪除 ${selectedPhotoPaths.size} 張照片（已建立的字詞不受影響）。",
+            confirmText = "刪除",
+            onConfirm = onDeleteSelectedPhotos,
+            onDismiss = { confirmDelete = false }
+        )
     }
 }

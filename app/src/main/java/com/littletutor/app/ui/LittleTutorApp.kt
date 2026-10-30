@@ -156,6 +156,7 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
             EditTestUnitDialog(
                 title = uiState.editingUnitTitleInput,
                 words = uiState.editingUnitWordsInput,
+                otherTitles = uiState.testUnits.filter { it.id != uiState.editingUnitId }.map { it.title },
                 onTitleChange = viewModel::updateEditingUnitTitle,
                 onWordsChange = viewModel::updateEditingUnitWords,
                 onSave = viewModel::saveEditingUnit,
@@ -167,13 +168,14 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
             AddTestUnitDialog(
                 title = uiState.addingUnitTitleInput,
                 words = uiState.addingUnitWordsInput,
+                otherTitles = uiState.testUnits.map { it.title },
                 isPhotoAreaOpen = uiState.isAddUnitPhotoAreaOpen,
                 photoPaths = uiState.photoPaths,
                 selectedPhotoPaths = uiState.selectedPhotoPaths,
                 onTitleChange = viewModel::updateAddingUnitTitle,
                 onWordsChange = viewModel::updateAddingUnitWords,
                 onOpenPhotoArea = viewModel::openAddUnitPhotoArea,
-                onClosePhotoArea = viewModel::closeAddUnitDialog,
+                onClosePhotoArea = viewModel::closeAddUnitPhotoArea,
                 onTakePhoto = {
                     viewModel.preparePhotoCaptureUri()?.let { uri ->
                         cameraLauncher.launch(uri)

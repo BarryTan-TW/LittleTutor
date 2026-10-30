@@ -609,12 +609,11 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveAddedUnit() {
         val currentUser = _uiState.value.currentUser ?: return
-        val parsedWords = _uiState.value.addingUnitWordsInput
-            .split("[、，,\n\r]+".toRegex())
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+        val parsedWords = UnitInput.parseWords(_uiState.value.addingUnitWordsInput)
         val title = _uiState.value.addingUnitTitleInput.trim()
-        if (title.isEmpty() || parsedWords.isEmpty()) {
+        val titleError = UnitInput.titleError(title, _uiState.value.testUnits.map { it.title })
+        if (titleError != null || parsedWords.isEmpty()) {
+            showMessage(titleError ?: "請至少輸入一個字詞")
             return
         }
 
@@ -626,6 +625,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
         )
         reloadFromStorage()
         closeAddUnitDialog()
+        showMessage("已新增「$title」")
     }
 
     fun closeEditUnitDialog() {
@@ -650,10 +650,13 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     fun saveEditingUnit() {
         val currentUser = _uiState.value.currentUser ?: return
         val editingId = _uiState.value.editingUnitId ?: return
-        val parsedWords = _uiState.value.editingUnitWordsInput
-            .split("[、，,\n\r]+".toRegex())
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
+        val parsedWords = UnitInput.parseWords(_uiState.value.editingUnitWordsInput)
+        val otherTitles = _uiState.value.testUnits.filter { it.id != editingId }.map { it.title }
+        val titleError = UnitInput.titleError(_uiState.value.editingUnitTitleInput, otherTitles)
+        if (titleError != null || parsedWords.isEmpty()) {
+            showMessage(titleError ?: "請至少輸入一個字詞")
+            return
+        }
 
         val updated = userSpaceManager.updateTestUnit(
             userId = currentUser.id,
