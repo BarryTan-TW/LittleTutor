@@ -179,6 +179,60 @@ class UserSpaceManagerTest {
     }
 
     @Test
+    fun updateTestUnit_renamingTitleKeepsTestHistoryLinked() {
+        val user = manager.addUser("Rename")
+        val unit = manager.saveTestUnit(user.id, "舊課", listOf("春天"), emptyList())
+        manager.saveTestRecord(user.id, record("舊課"))
+        manager.saveTestRecord(user.id, record("別課"))
+
+        manager.updateTestUnit(user.id, unit.id, "新課", listOf("春天"))
+
+        assertThat(manager.loadTestRecords(user.id).map { it.unitTitle })
+            .containsExactly("新課", "別課")
+    }
+
+    @Test
+    fun clearTestRecords_byTitle_removesRecordsThatIncludeTheTitle() {
+        val user = manager.addUser("Clear")
+        manager.saveTestRecord(user.id, record("A"))
+        manager.saveTestRecord(user.id, record("A, B"))
+        manager.saveTestRecord(user.id, record("B"))
+
+        manager.clearTestRecords(user.id, "A")
+
+        assertThat(manager.loadTestRecords(user.id).map { it.unitTitle }).containsExactly("B")
+    }
+
+    @Test
+    fun loadTestRecords_keepsWordsContainingPipe() {
+        val user = manager.addUser("Pipe")
+        manager.saveTestRecord(
+            user.id,
+            record("A").copy(results = listOf(WritingTestResult("a|b", isCorrect = true)))
+        )
+
+        val results = manager.loadTestRecords(user.id).single().results
+
+        assertThat(results).containsExactly(WritingTestResult("a|b", isCorrect = true))
+    }
+
+    @Test
+    fun isUnitTitleTaken_ignoresTheUnitBeingEdited() {
+        val user = manager.addUser("Dup")
+        val unit = manager.saveTestUnit(user.id, "第1課", listOf("一"), emptyList())
+
+        assertThat(manager.isUnitTitleTaken(user.id, " 第1課 ")).isTrue()
+        assertThat(manager.isUnitTitleTaken(user.id, "第1課", exceptUnitId = unit.id)).isFalse()
+    }
+
+    private fun record(title: String) = TestRecord(
+        unitTitle = title,
+        totalCount = 1,
+        correctCount = 1,
+        results = listOf(WritingTestResult("一", isCorrect = true))
+    )
+
+    @Test
     fun deleteUser_returnsFalseWhenTryingToDeleteLastUser() {
         val deleted = manager.deleteUser("guest")
 

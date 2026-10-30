@@ -536,7 +536,7 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
             val targetUnit = _uiState.value.testUnits.firstOrNull { it.id == unitId }
             if (targetUnit != null) {
                 records = records.filter { record ->
-                    record.unitTitle.split(", ").map { it.trim() }.contains(targetUnit.title)
+                    UserSpaceManager.splitRecordTitles(record.unitTitle).contains(targetUnit.title)
                 }
             }
         }

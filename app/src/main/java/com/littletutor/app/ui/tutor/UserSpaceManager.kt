@@ -97,7 +97,7 @@ class UserSpaceManager(private val rootDir: File) {
     }
 
     fun writeProfile(userId: String, content: String) {
-        profileFile(userId).writeText(content)
+        profileFile(userId).writeTextAtomic(content)
     }
 
     fun loadTestUnits(userId: String): List<TestUnit> {
@@ -211,11 +211,15 @@ class UserSpaceManager(private val rootDir: File) {
             return false
         }
 
+        val oldTitle = allUnits[index].title
         allUnits[index] = allUnits[index].copy(
             title = trimmedTitle,
             words = cleanedWords
         )
         writeTestUnits(userId, allUnits)
+        if (oldTitle != trimmedTitle) {
+            renameTitleInRecords(userId, oldTitle, trimmedTitle)
+        }
         return true
     }
 
@@ -249,6 +253,11 @@ class UserSpaceManager(private val rootDir: File) {
         return deletedCount
     }
 
+    fun isUnitTitleTaken(userId: String, title: String, exceptUnitId: String? = null): Boolean {
+        val trimmed = title.trim()
+        return loadTestUnits(userId).any { it.title == trimmed && it.id != exceptUnitId }
+    }
+
     fun moveTestUnit(userId: String, fromIndex: Int, toIndex: Int): Boolean {
         val allUnits = loadTestUnits(userId).toMutableList()
         if (fromIndex !in allUnits.indices || toIndex !in allUnits.indices) return false
@@ -271,7 +280,7 @@ class UserSpaceManager(private val rootDir: File) {
             if (parts.size == 5) {
                 val recordId = parts[0].trim()
                 val unitTitle = decode(parts[2].trim())
-                val titlesInRecord = unitTitle.split(", ").map { it.trim() }.toSet()
+                val titlesInRecord = splitRecordTitles(unitTitle).toSet()
                 val shouldDelete = titlesInRecord.any { it in targetTitles }
                 if (shouldDelete) {
                     File(recordsDir, "${recordId}_results.txt").takeIf { it.exists() }?.delete()
@@ -282,33 +291,22 @@ class UserSpaceManager(private val rootDir: File) {
                 linesToKeep += line
             }
         }
-        recordFile.writeText(linesToKeep.joinToString("\n"))
+        recordFile.writeTextAtomic(linesToKeep.joinToString("\n"))
     }
 
-    private fun deleteRecordsByExactTitle(userId: String, targetTitle: String) {
-        val recordsDir = File(userDirectory(userId), "test_records")
-        if (!recordsDir.exists()) return
-
-        val recordFile = File(recordsDir, "records.csv")
+    private fun renameTitleInRecords(userId: String, oldTitle: String, newTitle: String) {
+        val recordFile = File(File(userDirectory(userId), "test_records"), "records.csv")
         if (!recordFile.exists()) return
 
-        val linesToKeep = mutableListOf<String>()
-        recordFile.readLines().filter { it.isNotBlank() }.forEach { line ->
+        val updated = recordFile.readLines().filter { it.isNotBlank() }.map { line ->
             val parts = line.split("|")
-            if (parts.size == 5) {
-                val recordId = parts[0].trim()
-                val unitTitle = decode(parts[2].trim())
-                val shouldDelete = unitTitle == targetTitle
-                if (shouldDelete) {
-                    File(recordsDir, "${recordId}_results.txt").takeIf { it.exists() }?.delete()
-                } else {
-                    linesToKeep += line
-                }
-            } else {
-                linesToKeep += line
-            }
+            if (parts.size != 5) return@map line
+            val titles = splitRecordTitles(decode(parts[2].trim()))
+            if (oldTitle !in titles) return@map line
+            val renamed = titles.joinToString(RECORD_TITLE_SEPARATOR) { if (it == oldTitle) newTitle else it }
+            parts.toMutableList().also { it[2] = encode(renamed) }.joinToString("|")
         }
-        recordFile.writeText(linesToKeep.joinToString("\n"))
+        recordFile.writeTextAtomic(updated.joinToString("\n"))
     }
 
     fun createPhotoFile(userId: String): File {
@@ -417,7 +415,7 @@ class UserSpaceManager(private val rootDir: File) {
         val content = users.joinToString(separator = "\n") {
             "${it.id}|${it.displayName.replace('\n', ' ').trim()}"
         }
-        usersFile.writeText(content)
+        usersFile.writeTextAtomic(content)
     }
 
     private fun readCurrentUserId(): String? {
@@ -428,7 +426,7 @@ class UserSpaceManager(private val rootDir: File) {
     }
 
     private fun writeCurrentUserId(userId: String) {
-        currentUserFile.writeText(userId)
+        currentUserFile.writeTextAtomic(userId)
     }
 
     private fun toUserId(displayName: String): String {
@@ -460,7 +458,7 @@ class UserSpaceManager(private val rootDir: File) {
                 encodeList(unit.photoPaths)
             ).joinToString(separator = "|")
         }
-        testUnitsFile(userId).writeText(lines)
+        testUnitsFile(userId).writeTextAtomic(lines)
     }
 
     private fun encode(value: String): String {
@@ -505,10 +503,10 @@ class UserSpaceManager(private val rootDir: File) {
 
         // 保存結果詳情
         val resultsContent = record.results.joinToString("\n") { "${it.word}|${if (it.isCorrect) "1" else "0"}" }
-        resultFile.writeText(resultsContent)
+        resultFile.writeTextAtomic(resultsContent)
 
         // 記錄到CSV
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+        val dateFormat = SimpleDateFormat(RECORD_DATE_PATTERN, Locale.US)
         val csvLine = buildString {
             append(record.id).append("|")
             append(dateFormat.format(record.timestamp)).append("|")
@@ -519,7 +517,7 @@ class UserSpaceManager(private val rootDir: File) {
 
         val existingContent = if (recordFile.exists()) recordFile.readText().trim() else ""
         val newContent = if (existingContent.isEmpty()) csvLine else existingContent + "\n" + csvLine
-        recordFile.writeText(newContent)
+        recordFile.writeTextAtomic(newContent)
     }
 
     fun loadTestRecords(userId: String): List<TestRecord> {
@@ -533,7 +531,7 @@ class UserSpaceManager(private val rootDir: File) {
             return emptyList()
         }
 
-        val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+        val dateFormat = SimpleDateFormat(RECORD_DATE_PATTERN, Locale.US)
         val records = mutableListOf<TestRecord>()
 
         recordFile.readLines()
@@ -559,15 +557,12 @@ class UserSpaceManager(private val rootDir: File) {
                         resultFile.readLines()
                             .filter { it.isNotBlank() }
                             .mapNotNull { resultLine ->
-                                val resultParts = resultLine.split("|")
-                                if (resultParts.size == 2) {
-                                    WritingTestResult(
-                                        word = resultParts[0].trim(),
-                                        isCorrect = resultParts[1].trim() == "1"
-                                    )
-                                } else {
-                                    null
-                                }
+                                val separator = resultLine.lastIndexOf('|')
+                                if (separator <= 0) return@mapNotNull null
+                                WritingTestResult(
+                                    word = resultLine.substring(0, separator).trim(),
+                                    isCorrect = resultLine.substring(separator + 1).trim() == "1"
+                                )
                             }
                     } else {
                         emptyList()
@@ -596,13 +591,30 @@ class UserSpaceManager(private val rootDir: File) {
                 recordsDir.deleteRecursively()
             }
         } else {
-            deleteRecordsByExactTitle(userId, unitTitle)
+            deleteRecordsByIncludedTitles(userId, setOf(unitTitle))
         }
     }
 
     companion object {
+        private const val RECORD_DATE_PATTERN = "yyyy-MM-dd HH:mm:ss"
+        const val RECORD_TITLE_SEPARATOR = ", "
+
+        fun splitRecordTitles(unitTitle: String): List<String> =
+            unitTitle.split(RECORD_TITLE_SEPARATOR).map { it.trim() }.filter { it.isNotEmpty() }
+
         fun withAppFilesDir(filesDir: File): UserSpaceManager {
             return UserSpaceManager(rootDir = File(filesDir, "user_spaces"))
         }
+    }
+}
+
+/** Writes via a temp file + rename so a crash mid-write never leaves a truncated file. */
+internal fun File.writeTextAtomic(text: String) {
+    parentFile?.mkdirs()
+    val temp = File(parentFile, "$name.tmp")
+    temp.writeText(text, Charsets.UTF_8)
+    if (!temp.renameTo(this)) {
+        writeText(text, Charsets.UTF_8)
+        temp.delete()
     }
 }
