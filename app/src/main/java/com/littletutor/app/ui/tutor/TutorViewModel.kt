@@ -91,7 +91,8 @@ data class LittleTutorUiState(
     val testRecords: List<TestRecord> = emptyList(),
     val wordStatistics: List<WordStatistics> = emptyList(),
     val isScoreHistoryOpen: Boolean = false,
-    val scoreHistoryUnitId: String? = null
+    val scoreHistoryUnitId: String? = null,
+    val userMessage: String? = null
 )
 
 class TutorViewModel(application: Application) : AndroidViewModel(application) {
@@ -108,6 +109,14 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     init {
         reloadFromStorage()
         ensureTextToSpeech()
+    }
+
+    fun consumeUserMessage() {
+        _uiState.update { it.copy(userMessage = null) }
+    }
+
+    private fun showMessage(message: String) {
+        _uiState.update { it.copy(userMessage = message) }
     }
 
     fun openSettings() {
