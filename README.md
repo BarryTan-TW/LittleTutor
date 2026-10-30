@@ -26,19 +26,24 @@ This app aims to act as a "personal tutor," helping children review their lesson
 #### 📸 Rapid Textbook Digitization
 *   **Text Recognition (OCR):** Powered by Google ML Kit, capture textbook photos to recognize text directly.
 *   **Lasso Selection for Question Banks:** Use "tap" or "lasso" selection to precisely pick words from photos, allowing for quick creation or expansion of lesson units.
-*   **Structured Management:** Custom lesson titles to organize vocabulary systematically.
+*   **Structured Management:** Custom lesson titles to organize vocabulary systematically; duplicate titles are rejected, and photos can be picked from a grid of previous captures.
 
 #### ✍️ Interactive Dictation Tests
 *   **AI Handwriting Recognition:** Built-in digital writing board where students can practice handwriting. The system automatically compares results and provides instant feedback.
 *   **Multiple Testing Modes:**
     *   **Writing Board:** AI automatically evaluates correctness.
     *   **Manual Confirm:** For student self-assessment.
-*   **Speech Synthesis Support:** Integrated TTS technology automatically reads questions, with adjustable speech rates (0.5x - 2.0x) to suit different learning stages.
+*   **Speech Synthesis Support:** Integrated TTS technology automatically reads questions, with adjustable speech rates (0.5x - 2.0x) to suit different learning stages. Tap "再聽一次" to hear a word again.
+*   **Auto-save & Wrong-word Practice:** Each finished round is saved to history automatically, and "練習錯字" starts a practice round with only the words written wrong.
 
 #### 📊 Learning Analytics
 *   **Score History:** Detailed logs of every test, including timestamps, accuracy, and specific results.
 *   **Weakness Analysis:** Automatically identifies "words needing improvement," sorted by error rate, helping students target difficult areas.
-*   **Multi-User Management:** Supports multiple student profiles, keeping learning records and question banks separate for each child.
+*   **Multi-User Management:** Supports multiple student profiles, keeping learning records and question banks separate for each child. Deleting a profile asks for confirmation, and the last profile cannot be deleted.
+
+#### 📱 Phones & Tablets
+*   Adaptive layouts for portrait, landscape and tablets (two-pane writing test and history on wide screens).
+*   The testing mode and speech rate are remembered between launches.
 
 ### 🛠 Tech Stack
 
@@ -49,6 +54,12 @@ This app aims to act as a "personal tutor," helping children review their lesson
 *   **Data Storage:** Custom file-based persistence (CSV & Text storage).
 *   **Speech:** Android TextToSpeech (TTS).
 *   **Asynchronous:** Kotlin Coroutines & Flow.
+
+### 🔧 Build & Test
+
+```bash
+bash gradlew testDebugUnitTest assembleDebug
+```
 
 ---
 
@@ -74,19 +85,24 @@ LittleTutor 是一款專為小學生設計的整合式 Android 學習夥伴，�
 #### 📸 課文快速數位化
 *   **照片文字辨識 (OCR)：** 使用 Google ML Kit 技術，直接拍攝課文即可辨識文字。
 *   **圈選建立題庫：** 提供「點擊」或「曲線圈選 (Lasso)」功能，讓使用者能從照片中精準選取需要的詞彙，快速建立或擴增課文單元。
-*   **結構化管理：** 自定義課文名稱，將詞彙有系統地分類管理。
+*   **結構化管理：** 自定義課文名稱，將詞彙有系統地分類管理；課文名稱不可重複，也能從先前拍攝的照片中挑選。
 
 ### ✍️ 互動式聽寫測試
 *   **AI 手寫辨識：** 內建數位畫板，學生可直接在螢幕上手寫練習。系統會自動比對書寫結果，提供即時回饋。
 *   **多種測試模式：**
     *   **畫板書寫：** 由 AI 自動辨識正誤。
     *   **自行確認：** 供學生自我評量。
-*   **語音朗讀輔助：** 結合 TTS 技術自動朗讀題目，並可調整語速（0.5x - 2.0x），適應不同學習階段。
+*   **語音朗讀輔助：** 結合 TTS 技術自動朗讀題目，並可調整語速（0.5x - 2.0x），適應不同學習階段；按「再聽一次」可重聽。
+*   **自動儲存與練習錯字：** 每輪測驗完成後自動存入成績紀錄，按「練習錯字」即可只練習寫錯的字。
 
 ### 📊 學習成效分析
 *   **歷史成績記錄：** 詳細記錄每一次測試的時間、正確率與具體結果。
 *   **弱點分析：** 系統會自動統計「需要加強的字詞」，根據失敗率排序，幫助學生針對難點進行重複練習。
-*   **多使用者管理：** 支援多個學生檔案，每位孩子的學習記錄與題庫皆獨立保存。
+*   **多使用者管理：** 支援多個學生檔案，每位孩子的學習記錄與題庫皆獨立保存。刪除前會再次確認，且至少保留一位使用者。
+
+### 📱 手機與平板
+*   直向、橫向與平板皆有適合的版面（寬螢幕下聽寫與成績頁採雙欄顯示）。
+*   測試方式與語速會在重新開啟 App 後保留。
 
 ### 🛠 技術棧
 
@@ -97,3 +113,9 @@ LittleTutor 是一款專為小學生設計的整合式 Android 學習夥伴，�
 *   **資料儲存：** 基於檔案系統的自定義持久化方案 (CSV & Text 存儲)。
 *   **語音技術：** Android TextToSpeech (TTS)。
 *   **異步處理：** Kotlin Coroutines & Flow。
+
+### 🔧 建置與測試
+
+```bash
+bash gradlew testDebugUnitTest assembleDebug
+```
