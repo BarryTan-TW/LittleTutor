@@ -90,7 +90,6 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
     ) { innerPadding ->
         if (uiState.isWritingTestActive) {
             WritingTestScreen(
-                viewModel = viewModel,
                 uiState = uiState,
                 innerPadding = innerPadding,
                 onReplayWord = viewModel::replayCurrentWord,
@@ -98,8 +97,12 @@ fun LittleTutorApp(viewModel: TutorViewModel = viewModel()) {
                 onEvaluateWritingBitmap = viewModel::evaluateWritingBitmap,
                 onClearRecognition = viewModel::clearWritingRecognition,
                 onNextWord = viewModel::nextWritingWord,
+                onConfirmResult = viewModel::confirmTestResult,
                 onRestartRound = viewModel::restartWritingRound,
-                onFinishTest = { showExitTestConfirm = true },
+                onRetryWrongWords = viewModel::retryWrongWords,
+                onOpenHistory = { viewModel.openScoreHistory(uiState.writingUnitId) },
+                onExitTest = { showExitTestConfirm = true },
+                onBackHome = viewModel::finishWritingTest,
                 onUpdateSpeechRate = viewModel::updateWritingSpeechRate
             )
         } else {

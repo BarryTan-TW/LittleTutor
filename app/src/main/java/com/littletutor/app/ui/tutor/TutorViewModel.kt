@@ -91,7 +91,12 @@ data class LittleTutorUiState(
     val recognizedWritingText: String = "",
     val isWritingAnswerCorrect: Boolean? = null,
     val isWritingRoundFinished: Boolean = false,
-    val isWritingTestSaved: Boolean = false,
+    // Full word list of the unit, so a practice round can be followed by a full re-test.
+    val writingUnitWords: List<String> = emptyList(),
+    // Practice rounds (retrying wrong words) are not saved, so they don't skew the unit score.
+    val writingIsPracticeRound: Boolean = false,
+    val writingIsAdvancing: Boolean = false,
+    val writingIsEvaluating: Boolean = false,
     val writingCorrectCount: Int = 0,
     val writingSpeechRate: Float = 1.0f,
     val writingTestResults: List<WritingTestResult> = emptyList(),
@@ -99,8 +104,11 @@ data class LittleTutorUiState(
     val wordStatistics: List<WordStatistics> = emptyList(),
     val isScoreHistoryOpen: Boolean = false,
     val scoreHistoryUnitId: String? = null,
-    val userMessage: String? = null
+    val userMessage: String? = null,
+    val ttsStatus: TtsStatus = TtsStatus.INITIALIZING
 )
+
+enum class TtsStatus { INITIALIZING, READY, UNAVAILABLE }
 
 class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private val userSpaceManager = UserSpaceManager.withAppFilesDir(application.filesDir)
@@ -110,9 +118,10 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     private var pendingCaptureFile: File? = null
     private val textRecognizer = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
     private var textToSpeech: TextToSpeech? = null
-    private var ttsReady = false
     private val writingResultsByIndex = mutableMapOf<Int, Boolean>()
     private var ocrJob: Job? = null
+    private var writingEvalJob: Job? = null
+    private var writingAdvanceJob: Job? = null
 
     init {
         reloadFromStorage()
@@ -315,38 +324,69 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startUnitTest(unitId: String) {
         val unit = _uiState.value.testUnits.firstOrNull { it.id == unitId } ?: return
-        val words = unit.words
-            .map { it.trim() }
-            .filter { it.isNotEmpty() }
-            .distinct()
-            .shuffled(Random(System.currentTimeMillis()))
-
+        val words = unit.words.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         if (words.isEmpty()) {
+            showMessage("這課還沒有字詞，請先編輯加入")
             return
         }
-
-        writingResultsByIndex.clear()
-
         _uiState.update {
             it.copy(
                 isWritingTestActive = true,
                 writingUnitId = unit.id,
                 writingUnitTitle = unit.title,
-                writingWordsRound = words,
+                writingUnitWords = words
+            )
+        }
+        beginWritingRound(words, practice = false)
+    }
+
+    /** Starts a new round with only the words answered wrong in the round just finished. */
+    fun retryWrongWords() {
+        val wrong = _uiState.value.writingTestResults.filterNot { it.isCorrect }.map { it.word }
+        if (wrong.isEmpty()) return
+        beginWritingRound(wrong, practice = true)
+    }
+
+    fun restartWritingRound() {
+        val state = _uiState.value
+        val words = state.writingUnitWords.ifEmpty { state.writingWordsRound }
+        if (words.isEmpty()) return
+        beginWritingRound(words, practice = false)
+    }
+
+    private fun beginWritingRound(words: List<String>, practice: Boolean) {
+        cancelWritingJobs()
+        writingResultsByIndex.clear()
+        _uiState.update {
+            it.copy(
+                writingWordsRound = words.shuffled(Random(System.currentTimeMillis())),
                 writingCurrentIndex = 0,
                 writingShowAnswer = false,
                 recognizedWritingText = "",
                 isWritingAnswerCorrect = null,
                 isWritingRoundFinished = false,
-                isWritingTestSaved = false,
-                writingCorrectCount = 0
+                writingIsPracticeRound = practice,
+                writingIsAdvancing = false,
+                writingIsEvaluating = false,
+                writingCorrectCount = 0,
+                writingTestResults = emptyList()
             )
         }
-
         speakCurrentWord()
     }
 
+    private fun cancelWritingJobs() {
+        writingEvalJob?.cancel()
+        writingEvalJob = null
+        writingAdvanceJob?.cancel()
+        writingAdvanceJob = null
+    }
+
     fun replayCurrentWord() {
+        if (_uiState.value.ttsStatus == TtsStatus.UNAVAILABLE) {
+            showMessage("這台裝置無法朗讀中文，請到系統設定安裝中文語音")
+            return
+        }
         speakCurrentWord()
     }
 
@@ -360,27 +400,37 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearWritingRecognition() {
+        writingEvalJob?.cancel()
         _uiState.update {
             it.copy(
                 recognizedWritingText = "",
-                isWritingAnswerCorrect = null
+                isWritingAnswerCorrect = null,
+                writingIsEvaluating = false
             )
         }
     }
 
     fun evaluateWritingBitmap(bitmap: Bitmap) {
-        val currentWord = _uiState.value.writingWordsRound.getOrNull(_uiState.value.writingCurrentIndex) ?: return
-        viewModelScope.launch {
-            val candidates = recognizeTextCandidates(bitmap)
-            val isCorrect = isTargetMatched(candidates, currentWord)
-            val recognized = pickBestCandidate(candidates, currentWord)
-            val index = _uiState.value.writingCurrentIndex
+        val state = _uiState.value
+        if (!state.isWritingTestActive || state.isWritingRoundFinished || state.writingIsAdvancing) return
+        // Capture the question now: the child may move on before recognition finishes.
+        val index = state.writingCurrentIndex
+        val currentWord = state.writingWordsRound.getOrNull(index) ?: return
+        writingEvalJob?.cancel()
+        _uiState.update { it.copy(writingIsEvaluating = true) }
+        writingEvalJob = viewModelScope.launch {
+            val (recognized, isCorrect) = withContext(Dispatchers.Default) {
+                val candidates = recognizeTextCandidates(bitmap)
+                pickBestCandidate(candidates, currentWord) to isTargetMatched(candidates, currentWord)
+            }
+            val now = _uiState.value
+            if (!now.isWritingTestActive || now.writingCurrentIndex != index || now.isWritingRoundFinished) return@launch
             writingResultsByIndex[index] = isCorrect
-
             _uiState.update {
                 it.copy(
                     recognizedWritingText = recognized,
                     isWritingAnswerCorrect = isCorrect,
+                    writingIsEvaluating = false,
                     writingCorrectCount = writingResultsByIndex.values.count { value -> value }
                 )
             }
@@ -389,24 +439,12 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
 
     fun nextWritingWord() {
         val state = _uiState.value
-        if (!state.isWritingTestActive) {
-            return
-        }
+        if (!state.isWritingTestActive || state.isWritingRoundFinished) return
+        cancelWritingJobs()
 
         val nextIndex = state.writingCurrentIndex + 1
         if (nextIndex >= state.writingWordsRound.size) {
-            // 生成測試結果列表
-            val results = state.writingWordsRound.mapIndexed { index, word ->
-                WritingTestResult(word, writingResultsByIndex[index] ?: false)
-            }
-            _uiState.update {
-                it.copy(
-                    isWritingRoundFinished = true,
-                    recognizedWritingText = "",
-                    isWritingAnswerCorrect = null,
-                    writingTestResults = results
-                )
-            }
+            finishWritingRound()
             return
         }
 
@@ -415,102 +453,92 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
                 writingCurrentIndex = nextIndex,
                 writingShowAnswer = false,
                 recognizedWritingText = "",
-                isWritingAnswerCorrect = null
+                isWritingAnswerCorrect = null,
+                writingIsAdvancing = false,
+                writingIsEvaluating = false
             )
         }
         speakCurrentWord()
+    }
+
+    private fun finishWritingRound() {
+        textToSpeech?.stop()
+        val state = _uiState.value
+        val results = state.writingWordsRound.mapIndexed { index, word ->
+            WritingTestResult(word, writingResultsByIndex[index] ?: false)
+        }
+        _uiState.update {
+            it.copy(
+                isWritingRoundFinished = true,
+                recognizedWritingText = "",
+                isWritingAnswerCorrect = null,
+                writingIsAdvancing = false,
+                writingIsEvaluating = false,
+                writingTestResults = results,
+                writingCorrectCount = results.count { r -> r.isCorrect }
+            )
+        }
+        if (!state.writingIsPracticeRound) {
+            saveTestRecord(state.writingUnitTitle, results)
+        }
     }
 
     fun confirmTestResult(isCorrect: Boolean) {
         val state = _uiState.value
-        if (!state.isWritingTestActive) {
-            return
-        }
+        // Guard against double taps: ignore input while the short feedback delay is running.
+        if (!state.isWritingTestActive || state.isWritingRoundFinished || state.writingIsAdvancing) return
 
         val index = state.writingCurrentIndex
         writingResultsByIndex[index] = isCorrect
-
         _uiState.update {
             it.copy(
                 isWritingAnswerCorrect = isCorrect,
+                writingIsAdvancing = true,
                 writingCorrectCount = writingResultsByIndex.values.count { value -> value }
             )
         }
 
-        // 自動進行到下一題
-        viewModelScope.launch {
+        writingAdvanceJob = viewModelScope.launch {
             kotlinx.coroutines.delay(400)
-            nextWritingWord()
+            if (_uiState.value.writingCurrentIndex == index) nextWritingWord()
         }
-    }
-
-    fun restartWritingRound() {
-        val words = _uiState.value.writingWordsRound
-        if (words.isEmpty()) {
-            return
-        }
-
-        writingResultsByIndex.clear()
-        _uiState.update {
-            it.copy(
-                writingWordsRound = words.shuffled(Random(System.currentTimeMillis())),
-                writingCurrentIndex = 0,
-                writingShowAnswer = false,
-                recognizedWritingText = "",
-                isWritingAnswerCorrect = null,
-                isWritingRoundFinished = false,
-                isWritingTestSaved = false,
-                writingCorrectCount = 0
-            )
-        }
-        speakCurrentWord()
     }
 
     fun finishWritingTest() {
+        cancelWritingJobs()
+        textToSpeech?.stop()
         _uiState.update {
             it.copy(
                 isWritingTestActive = false,
                 isWritingRoundFinished = false,
                 writingWordsRound = emptyList(),
+                writingUnitWords = emptyList(),
                 writingCurrentIndex = 0,
                 writingShowAnswer = false,
                 recognizedWritingText = "",
                 isWritingAnswerCorrect = null,
                 writingCorrectCount = 0,
                 writingTestResults = emptyList(),
-                isWritingTestSaved = false
+                writingIsPracticeRound = false,
+                writingIsAdvancing = false,
+                writingIsEvaluating = false
             )
         }
         writingResultsByIndex.clear()
     }
 
-    fun saveTestRecord() {
-        var shouldProceed = false
-        _uiState.update { 
-            if (it.isWritingTestSaved) return@update it
-            shouldProceed = true
-            it.copy(isWritingTestSaved = true)
-        }
-        if (!shouldProceed) return
-        
-        val state = _uiState.value
-        val currentUser = state.currentUser ?: return
-        if (state.writingTestResults.isEmpty()) return
-
-        val timestamp = System.currentTimeMillis()
-
-        // 僅儲存一筆完整的測試紀錄（包含所有選取的課文名稱）
-        val combinedRecord = TestRecord(
-            timestamp = timestamp,
-            unitTitle = state.writingUnitTitle,
-            totalCount = state.writingTestResults.size,
-            correctCount = state.writingCorrectCount,
-            results = state.writingTestResults
+    private fun saveTestRecord(unitTitle: String, results: List<WritingTestResult>) {
+        val currentUser = _uiState.value.currentUser ?: return
+        if (results.isEmpty()) return
+        val record = TestRecord(
+            timestamp = System.currentTimeMillis(),
+            unitTitle = unitTitle,
+            totalCount = results.size,
+            correctCount = results.count { it.isCorrect },
+            results = results
         )
-        userSpaceManager.saveTestRecord(currentUser.id, combinedRecord)
+        userSpaceManager.saveTestRecord(currentUser.id, record)
         _uiState.update { it.copy(latestAccuracyByUnitTitle = latestAccuracyByUnitTitle(currentUser.id)) }
-
-        loadScoreHistory()
     }
 
     fun loadScoreHistory(unitId: String? = null) {
@@ -955,34 +983,34 @@ class TutorViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun speakCurrentWord() {
-        val word = _uiState.value.writingWordsRound.getOrNull(_uiState.value.writingCurrentIndex) ?: return
+        val state = _uiState.value
+        val word = state.writingWordsRound.getOrNull(state.writingCurrentIndex) ?: return
         ensureTextToSpeech()
-        if (!ttsReady) {
-            return
-        }
-        textToSpeech?.setSpeechRate(_uiState.value.writingSpeechRate)
+        if (_uiState.value.ttsStatus != TtsStatus.READY) return
+        textToSpeech?.setSpeechRate(state.writingSpeechRate)
         textToSpeech?.speak(word, TextToSpeech.QUEUE_FLUSH, null, "word_${System.currentTimeMillis()}")
     }
 
     private fun ensureTextToSpeech() {
-        if (textToSpeech != null) {
-            return
-        }
+        if (textToSpeech != null) return
 
         textToSpeech = TextToSpeech(getApplication()) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                val tts = textToSpeech ?: return@TextToSpeech
-                val localeResult = tts.setLanguage(Locale.TRADITIONAL_CHINESE)
-                if (localeResult == TextToSpeech.LANG_MISSING_DATA || localeResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-                    tts.setLanguage(Locale.SIMPLIFIED_CHINESE)
-                }
-                ttsReady = true
-                // 如果在初始化完成時已經在測試中，補上第一次朗讀
-                if (_uiState.value.isWritingTestActive && !_uiState.value.isWritingRoundFinished) {
-                    speakCurrentWord()
-                }
+            val tts = textToSpeech
+            val ready = status == TextToSpeech.SUCCESS && tts != null && selectChineseVoice(tts)
+            _uiState.update { it.copy(ttsStatus = if (ready) TtsStatus.READY else TtsStatus.UNAVAILABLE) }
+            // If a test was already running while the engine started, speak the first word now.
+            if (ready && _uiState.value.isWritingTestActive && !_uiState.value.isWritingRoundFinished) {
+                speakCurrentWord()
             }
         }
+    }
+
+    private fun selectChineseVoice(tts: TextToSpeech): Boolean {
+        fun supported(result: Int) =
+            result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED
+        return supported(tts.setLanguage(Locale.TRADITIONAL_CHINESE)) ||
+            supported(tts.setLanguage(Locale.SIMPLIFIED_CHINESE)) ||
+            supported(tts.setLanguage(Locale.CHINESE))
     }
 
     override fun onCleared() {
